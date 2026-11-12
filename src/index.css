@@ -1,0 +1,53 @@
+@import "tailwindcss";
+@import "@fontsource/plus-jakarta-sans/400.css";
+@import "@fontsource/plus-jakarta-sans/500.css";
+@import "@fontsource/plus-jakarta-sans/600.css";
+@import "@fontsource/plus-jakarta-sans/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+:root {
+  color-scheme: light;
+  --bg-canvas: #F6F6F6;
+  --bg-surface: #FEFEFE;
+  --bg-subtle: #EDEDEF;
+  --text-primary: #141414;
+  --text-secondary: #545454;
+  --border-hairline: #E2E2E2;
+  --accent: #276EF1;
+}
+
+.dark {
+  color-scheme: dark;
+  --bg-canvas: #111112;
+  --bg-surface: #19191B;
+  --bg-subtle: #242428;
+  --text-primary: #F5F5F7;
+  --text-secondary: #A1A1AA;
+  --border-hairline: #2A2A2E;
+  --accent: #276EF1;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-family: var(--font-sans);
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  overflow-x: clip;
+}
