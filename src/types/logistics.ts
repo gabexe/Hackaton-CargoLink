@@ -1,5 +1,7 @@
 export type UserRole = 'shipper' | 'carrier' | 'receiver';
 export type ThemeMode = 'light' | 'dark';
+export type CanvasViewMode = '3d' | 'map';
+export type CameraPreset = 'isometric' | 'side' | 'top';
 export type TripStatus =
   | 'docked'
   | 'in_transit'
@@ -24,6 +26,8 @@ export interface PalletSlot {
 export interface CorridorCheckpoint {
   city: string;
   kmFromOrigin: number;
+  lat: number;
+  lng: number;
   status: 'passed' | 'current' | 'upcoming';
   etaLabel: string;
 }
@@ -71,6 +75,16 @@ export interface CorridorRoute {
   checkpoints: CorridorCheckpoint[];
 }
 
+export interface CarbonEstimate {
+  palletsCount: number;
+  distanceKm: number;
+  co2SavedKg: number;
+  exclusiveCo2Kg: number;
+  sharedCo2Kg: number;
+  dieselSavedLiters: number;
+  reductionPct: number;
+}
+
 export interface SimulationEvent {
   id: string;
   timeLabel: string;
@@ -106,6 +120,7 @@ export interface PilotStats {
   totalBookedPallets: number;
   totalSavingsArs: number;
   totalCo2SavedKg: number;
+  totalDieselSavedLiters: number;
   avgOccupancyPct: number;
   activeAlertsCount: number;
 }

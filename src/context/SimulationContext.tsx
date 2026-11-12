@@ -2,14 +2,17 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
 import { CORRIDOR_ROUTES } from '../data/corridors';
+import { co2ToDieselLiters } from '../utils/carbon';
 import type {
   BackhaulDraft,
+  CanvasViewMode,
   CorridorCheckpoint,
   CorridorRoute,
   HandoffHint,
@@ -27,6 +30,8 @@ export interface SimulationContextValue {
   activeRoute: CorridorRoute;
   selectedRouteId: string;
   activeRole: UserRole;
+  canvasView: CanvasViewMode;
+  isAutoSimulating: boolean;
   selectedSlotIds: string[];
   draftCargoLabel: string;
   draftPalletWeightKg: number;
@@ -36,6 +41,8 @@ export interface SimulationContextValue {
   inspectedSlotId: string | null;
   pilotStats: PilotStats;
   setActiveRole: (role: UserRole) => void;
+  setCanvasView: (view: CanvasViewMode) => void;
+  toggleAutoSimulation: () => void;
   selectRoute: (routeId: string) => void;
   setInspectedSlotId: (slotId: string | null) => void;
   toggleDraftSlot: (slotId: string) => void;
@@ -140,24 +147,32 @@ function buildBackhaulRouteConfig(draft: BackhaulDraft): {
         {
           city: draft.origin,
           kmFromOrigin: 0,
+          lat: -34.4587,
+          lng: -58.9142,
           status: 'current',
           etaLabel: `${draft.departureWindow} - Carga en dársena`,
         },
         {
           city: 'Rosario, Santa Fe',
           kmFromOrigin: 302,
+          lat: -32.9442,
+          lng: -60.6505,
           status: 'upcoming',
           etaLabel: '+4 h 00 min',
         },
         {
           city: 'Villa María',
           kmFromOrigin: 556,
+          lat: -32.4075,
+          lng: -63.2402,
           status: 'upcoming',
           etaLabel: '+7 h 15 min',
         },
         {
           city: draft.destination,
           kmFromOrigin: 704,
+          lat: -31.4618,
+          lng: -64.1135,
           status: 'upcoming',
           etaLabel: '+9 h 10 min - Dársena',
         },
@@ -176,24 +191,32 @@ function buildBackhaulRouteConfig(draft: BackhaulDraft): {
         {
           city: draft.origin,
           kmFromOrigin: 0,
+          lat: -32.9442,
+          lng: -60.6505,
           status: 'current',
           etaLabel: `${draft.departureWindow} - Carga en dársena`,
         },
         {
           city: 'Marcos Juárez',
           kmFromOrigin: 146,
+          lat: -32.6978,
+          lng: -62.1067,
           status: 'upcoming',
           etaLabel: '+2 h 00 min',
         },
         {
           city: 'Villa María',
           kmFromOrigin: 254,
+          lat: -32.4075,
+          lng: -63.2402,
           status: 'upcoming',
           etaLabel: '+3 h 25 min',
         },
         {
           city: draft.destination,
           kmFromOrigin: 402,
+          lat: -31.4618,
+          lng: -64.1135,
           status: 'upcoming',
           etaLabel: '+5 h 15 min - Dársena',
         },
@@ -212,24 +235,32 @@ function buildBackhaulRouteConfig(draft: BackhaulDraft): {
         {
           city: draft.origin,
           kmFromOrigin: 0,
+          lat: -30.9817,
+          lng: -64.0942,
           status: 'current',
           etaLabel: `${draft.departureWindow} - Carga en dársena`,
         },
         {
           city: 'Estación Juárez Celman',
           kmFromOrigin: 25,
+          lat: -31.2647,
+          lng: -64.1614,
           status: 'upcoming',
           etaLabel: '+0 h 25 min',
         },
         {
           city: 'Circunvalación Córdoba',
           kmFromOrigin: 45,
+          lat: -31.3890,
+          lng: -64.1420,
           status: 'upcoming',
           etaLabel: '+0 h 45 min',
         },
         {
           city: draft.destination,
           kmFromOrigin: 54,
+          lat: -31.4618,
+          lng: -64.1135,
           status: 'upcoming',
           etaLabel: '+1 h 00 min - Dársena',
         },
@@ -247,24 +278,32 @@ function buildBackhaulRouteConfig(draft: BackhaulDraft): {
       {
         city: draft.origin,
         kmFromOrigin: 0,
+        lat: -32.4075,
+        lng: -63.2402,
         status: 'current',
         etaLabel: `${draft.departureWindow} - Carga en dársena`,
       },
       {
         city: 'Posta RN 9 Intermedia',
         kmFromOrigin: 160,
+        lat: -32.0200,
+        lng: -63.6800,
         status: 'upcoming',
         etaLabel: '+2 h 15 min',
       },
       {
         city: 'Circunvalación Córdoba',
         kmFromOrigin: 320,
+        lat: -31.3890,
+        lng: -64.1420,
         status: 'upcoming',
         etaLabel: '+4 h 20 min',
       },
       {
         city: draft.destination,
         kmFromOrigin: 345,
+        lat: -31.4618,
+        lng: -64.1135,
         status: 'upcoming',
         etaLabel: '+4 h 45 min - Dársena',
       },
@@ -327,6 +366,8 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
   const [routes, setRoutes] = useState<CorridorRoute[]>(cloneInitialRoutes);
   const [selectedRouteId, setSelectedRouteId] = useState<string>(CORRIDOR_ROUTES[0].id);
   const [activeRole, setActiveRoleState] = useState<UserRole>('shipper');
+  const [canvasView, setCanvasView] = useState<CanvasViewMode>('3d');
+  const [isAutoSimulating, setIsAutoSimulating] = useState<boolean>(false);
   const [selectedSlotIds, setSelectedSlotIds] = useState<string[]>([]);
   const [draftCargoLabel, setDraftCargoLabel] = useState<string>('Envases PET');
   const [draftPalletWeightKg, setDraftPalletWeightKg] = useState<number>(650);
@@ -358,10 +399,32 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     setEvents((prev) => [nextEvent, ...prev]);
   }, []);
 
-  const setActiveRole = useCallback((role: UserRole) => {
-    setActiveRoleState(role);
-    setInspectedSlotId(null);
-  }, []);
+  const setActiveRole = useCallback(
+    (role: UserRole) => {
+      setActiveRoleState(role);
+      setInspectedSlotId(null);
+      if (role === 'carrier') {
+        if (
+          activeRoute.tripStatus === 'in_transit' ||
+          activeRoute.tripStatus === 'near_dock' ||
+          activeRoute.tripStatus === 'incident'
+        ) {
+          setCanvasView('map');
+        }
+      } else if (role === 'shipper') {
+        setCanvasView(activeRoute.tripStatus === 'docked' ? '3d' : 'map');
+      } else if (role === 'receiver') {
+        setCanvasView(
+          activeRoute.tripStatus === 'near_dock' ||
+            activeRoute.tripStatus === 'in_transit' ||
+            activeRoute.tripStatus === 'arrived'
+            ? 'map'
+            : '3d'
+        );
+      }
+    },
+    [activeRoute.tripStatus]
+  );
 
   const selectRoute = useCallback(
     (routeIdOrCode: string) => {
@@ -375,6 +438,12 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         setSelectedRouteId(target.id);
         setSelectedSlotIds([]);
         setInspectedSlotId(null);
+        setIsAutoSimulating(false);
+        if (target.tripStatus === 'docked') {
+          setCanvasView('3d');
+        } else {
+          setCanvasView('map');
+        }
       }
     },
     [routes, selectedRouteId]
@@ -609,6 +678,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
 
       if (selectedRouteId === routeId) {
         setSelectedSlotIds([]);
+        setCanvasView('map');
       }
 
       setHandoffHint((prev) =>
@@ -961,6 +1031,35 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     [appendEvent, routes]
   );
 
+  const toggleAutoSimulation = useCallback(() => {
+    setIsAutoSimulating((prev) => !prev);
+  }, []);
+
+  useEffect(() => {
+    if (!isAutoSimulating) {
+      return;
+    }
+    if (
+      activeRoute.tripStatus !== 'in_transit' &&
+      activeRoute.tripStatus !== 'near_dock'
+    ) {
+      setIsAutoSimulating(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      advanceNextCheckpoint(activeRoute.id);
+    }, 2400);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    isAutoSimulating,
+    activeRoute.id,
+    activeRoute.tripStatus,
+    activeRoute.checkpoints,
+    advanceNextCheckpoint,
+  ]);
+
   const dismissHandoffHint = useCallback(() => {
     setHandoffHint(null);
   }, []);
@@ -974,6 +1073,8 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     setRoutes(cloneInitialRoutes());
     setSelectedRouteId(CORRIDOR_ROUTES[0].id);
     setActiveRoleState('shipper');
+    setCanvasView('3d');
+    setIsAutoSimulating(false);
     setSelectedSlotIds([]);
     setDraftCargoLabel('Envases PET');
     setDraftPalletWeightKg(650);
@@ -1006,11 +1107,13 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
 
     const avgOccupancyPct =
       totalCapacity > 0 ? Math.round((totalBookedPallets / totalCapacity) * 100) : 0;
+    const roundedCo2 = Math.round(totalCo2SavedKg * 10) / 10;
 
     return {
       totalBookedPallets,
       totalSavingsArs,
-      totalCo2SavedKg: Math.round(totalCo2SavedKg * 10) / 10,
+      totalCo2SavedKg: roundedCo2,
+      totalDieselSavedLiters: co2ToDieselLiters(roundedCo2),
       avgOccupancyPct,
       activeAlertsCount,
     };
@@ -1022,6 +1125,8 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       activeRoute,
       selectedRouteId,
       activeRole,
+      canvasView,
+      isAutoSimulating,
       selectedSlotIds,
       draftCargoLabel,
       draftPalletWeightKg,
@@ -1031,6 +1136,8 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       inspectedSlotId,
       pilotStats,
       setActiveRole,
+      setCanvasView,
+      toggleAutoSimulation,
       selectRoute,
       setInspectedSlotId,
       toggleDraftSlot,
@@ -1053,6 +1160,8 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       activeRoute,
       selectedRouteId,
       activeRole,
+      canvasView,
+      isAutoSimulating,
       selectedSlotIds,
       draftCargoLabel,
       draftPalletWeightKg,
@@ -1062,6 +1171,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       inspectedSlotId,
       pilotStats,
       setActiveRole,
+      toggleAutoSimulation,
       selectRoute,
       toggleDraftSlot,
       applyPalletQuantityPreset,

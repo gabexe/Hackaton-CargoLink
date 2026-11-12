@@ -7,16 +7,10 @@ export interface NavbarProps {
   onToggleTheme: () => void;
 }
 
-const DESKTOP_ROLES: Array<{ id: UserRole; label: string }> = [
-  { id: 'shipper', label: 'Dador PyME' },
-  { id: 'carrier', label: 'Transportista' },
-  { id: 'receiver', label: 'Planta Receptora' },
-];
-
-const MOBILE_ROLES: Array<{ id: UserRole; label: string; ariaLabel: string }> = [
-  { id: 'shipper', label: 'Dador', ariaLabel: 'Dador PyME' },
-  { id: 'carrier', label: 'Transportista', ariaLabel: 'Transportista' },
-  { id: 'receiver', label: 'Receptora', ariaLabel: 'Planta Receptora' },
+const ROLES: Array<{ id: UserRole; label: string; shortLabel: string }> = [
+  { id: 'shipper', label: 'Dador', shortLabel: 'Dador' },
+  { id: 'carrier', label: 'Transportista', shortLabel: 'Chofer' },
+  { id: 'receiver', label: 'Receptora', shortLabel: 'Planta' },
 ];
 
 export function Navbar({ theme, onToggleTheme }: NavbarProps) {
@@ -25,33 +19,33 @@ export function Navbar({ theme, onToggleTheme }: NavbarProps) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-[var(--border-hairline)] bg-[var(--bg-surface)]/95 backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex h-12 sm:h-14 max-w-6xl items-center justify-between gap-2 px-3 sm:px-6">
         <a
           href="#circuito"
-          className="inline-flex shrink-0 items-center gap-2.5 rounded-lg text-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#276EF1]"
+          className="inline-flex shrink-0 items-center gap-2 rounded-lg text-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#276EF1]"
           aria-label="Tramo - Inicio"
         >
           <span
             aria-hidden="true"
-            className="grid h-7 w-7 grid-cols-2 gap-0.5 rounded-lg bg-[#141414] p-1.5 dark:bg-[#F5F5F7]"
+            className="grid h-6 w-6 grid-cols-2 gap-0.5 rounded-md bg-[#141414] p-1 dark:bg-[#F5F5F7]"
           >
-            <span className="rounded-[2px] bg-[#F6F6F6] dark:bg-[#111112]" />
-            <span className="rounded-[2px] bg-[#276EF1]" />
-            <span className="col-span-2 rounded-[2px] bg-[#F6F6F6]/85 dark:bg-[#111112]/85" />
+            <span className="rounded-[1px] bg-[#F6F6F6] dark:bg-[#111112]" />
+            <span className="rounded-[1px] bg-[#276EF1]" />
+            <span className="col-span-2 rounded-[1px] bg-[#F6F6F6]/85 dark:bg-[#111112]/85" />
           </span>
-          <span className="text-lg font-bold tracking-tight text-[var(--text-primary)]">
+          <span className="hidden text-base font-bold tracking-tight text-[var(--text-primary)] sm:inline">
             Tramo
           </span>
         </a>
 
         <div
           role="tablist"
-          aria-label="Selector de rol operativo"
-          className="hidden items-center rounded-full border border-[var(--border-hairline)] bg-[var(--bg-subtle)] p-1 md:inline-flex"
+          aria-label="Perfil de usuario"
+          className="inline-flex items-center rounded-full border border-[var(--border-hairline)] bg-[var(--bg-subtle)] p-0.5"
         >
-          {DESKTOP_ROLES.map((role) => {
+          {ROLES.map((role) => {
             const isActive = activeRole === role.id;
-            const showNearDockDot = role.id === 'receiver' && hasNearDockRoute;
+            const showDot = role.id === 'receiver' && hasNearDockRoute;
 
             return (
               <button
@@ -60,84 +54,49 @@ export function Navbar({ theme, onToggleTheme }: NavbarProps) {
                 role="tab"
                 aria-selected={isActive}
                 onClick={() => setActiveRole(role.id)}
-                className={`inline-flex min-h-[34px] cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#276EF1] ${
+                className={`inline-flex min-h-[30px] cursor-pointer items-center gap-1 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#276EF1] sm:min-h-[32px] sm:px-4 ${
                   isActive
-                    ? 'bg-[var(--bg-surface)] text-[var(--text-primary)] shadow-xs ring-1 ring-[var(--border-hairline)]'
+                    ? 'bg-[#141414] text-[#F6F6F6] dark:bg-[#F5F5F7] dark:text-[#111112]'
                     : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
                 }`}
               >
-                <span>{role.label}</span>
-                {showNearDockDot && (
+                <span className="sm:hidden">{role.shortLabel}</span>
+                <span className="hidden sm:inline">{role.label}</span>
+                {showDot && (
                   <span
-                    aria-label="Unidad próxima a dársena"
-                    className="h-2 w-2 shrink-0 rounded-full bg-[#276EF1]"
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={resetSimulation}
-            className="inline-flex min-h-[36px] shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-3 py-1.5 text-xs font-medium text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-subtle)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#276EF1]"
-          >
-            <ArrowCounterClockwise size={15} weight="regular" aria-hidden="true" />
-            <span className="hidden sm:inline">Reiniciar demo</span>
-            <span className="sm:hidden">Reiniciar</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onToggleTheme}
-            aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-            className="inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--border-hairline)] bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-subtle)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#276EF1]"
-          >
-            {theme === 'dark' ? (
-              <Sun size={17} weight="regular" aria-hidden="true" />
-            ) : (
-              <Moon size={17} weight="regular" aria-hidden="true" />
-            )}
-          </button>
-        </div>
-      </div>
-
-      <div className="border-t border-[var(--border-hairline)] bg-[var(--bg-surface)] px-4 py-2 md:hidden">
-        <div
-          role="tablist"
-          aria-label="Selector rápido de rol"
-          className="grid grid-cols-3 gap-1 rounded-full border border-[var(--border-hairline)] bg-[var(--bg-subtle)] p-1"
-        >
-          {MOBILE_ROLES.map((role) => {
-            const isActive = activeRole === role.id;
-            const showNearDockDot = role.id === 'receiver' && hasNearDockRoute;
-
-            return (
-              <button
-                key={role.id}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                aria-label={role.ariaLabel}
-                onClick={() => setActiveRole(role.id)}
-                className={`inline-flex min-h-[36px] cursor-pointer items-center justify-center gap-1 whitespace-nowrap rounded-full px-2 py-1 text-xs transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#276EF1] ${
-                  isActive
-                    ? 'bg-[var(--bg-surface)] font-semibold text-[var(--text-primary)] shadow-xs ring-1 ring-[var(--border-hairline)]'
-                    : 'font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
-                }`}
-              >
-                <span className="truncate">{role.label}</span>
-                {showNearDockDot && (
-                  <span
-                    aria-hidden="true"
+                    aria-label="Unidad próxima"
                     className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#276EF1]"
                   />
                 )}
               </button>
             );
           })}
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={resetSimulation}
+            title="Reiniciar simulación"
+            aria-label="Reiniciar simulación"
+            className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--border-hairline)] bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-subtle)] sm:w-auto sm:gap-1.5 sm:px-3"
+          >
+            <ArrowCounterClockwise size={14} weight="regular" aria-hidden="true" />
+            <span className="hidden text-xs font-medium sm:inline">Reiniciar</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onToggleTheme}
+            aria-label={theme === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+            className="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full border border-[var(--border-hairline)] bg-[var(--bg-canvas)] text-[var(--text-primary)] transition-colors hover:bg-[var(--bg-subtle)]"
+          >
+            {theme === 'dark' ? (
+              <Sun size={15} weight="regular" aria-hidden="true" />
+            ) : (
+              <Moon size={15} weight="regular" aria-hidden="true" />
+            )}
+          </button>
         </div>
       </div>
     </header>

@@ -3,14 +3,11 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { SimulationProvider, useSimulation } from './context/SimulationContext';
 import type { ThemeMode } from './types/logistics';
 import { Navbar } from './components/Navbar';
-import { CircuitBar } from './components/CircuitBar';
 import { FleetStrip } from './components/FleetStrip';
 import { TrailerCutaway } from './components/TrailerCutaway';
 import { ShipperPanel } from './components/ShipperPanel';
 import { CarrierPanel } from './components/CarrierPanel';
 import { ReceiverPanel } from './components/ReceiverPanel';
-import { CorridorVisibility } from './components/CorridorVisibility';
-import { Footer } from './components/Footer';
 
 const THEME_STORAGE_KEY = 'tramo-theme';
 
@@ -34,19 +31,26 @@ function RolePanelStage() {
   const shouldReduceMotion = useReducedMotion();
 
   return (
-    <AnimatePresence mode="wait" initial={false}>
-      <motion.div
-        key={activeRole}
-        initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={shouldReduceMotion ? undefined : { opacity: 0, y: -6 }}
-        transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.16, ease: 'easeOut' }}
-      >
-        {activeRole === 'shipper' && <ShipperPanel />}
-        {activeRole === 'carrier' && <CarrierPanel />}
-        {activeRole === 'receiver' && <ReceiverPanel />}
-      </motion.div>
-    </AnimatePresence>
+    <div className="relative -mt-4 z-20 rounded-t-3xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] px-4 pt-2.5 pb-5 shadow-[0_-8px_24px_rgba(20,20,20,0.06)] dark:shadow-none lg:mt-0 lg:rounded-2xl lg:p-5">
+      {/* Mobile Bottom Sheet Grab Handle */}
+      <div
+        aria-hidden="true"
+        className="mx-auto mb-3 h-1 w-10 rounded-full bg-[var(--border-hairline)] lg:hidden"
+      />
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div
+          key={activeRole}
+          initial={shouldReduceMotion ? false : { opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={shouldReduceMotion ? undefined : { opacity: 0, y: -4 }}
+          transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.14, ease: 'easeOut' }}
+        >
+          {activeRole === 'shipper' && <ShipperPanel />}
+          {activeRole === 'carrier' && <CarrierPanel />}
+          {activeRole === 'receiver' && <ReceiverPanel />}
+        </motion.div>
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -91,24 +95,21 @@ export function App() {
     <SimulationProvider>
       <div className="min-h-dvh bg-[var(--bg-canvas)] text-[var(--text-primary)] antialiased transition-colors duration-200 flex flex-col">
         <Navbar theme={theme} onToggleTheme={handleToggleTheme} />
-        <main className="mx-auto w-full max-w-7xl flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 space-y-6">
-          <CircuitBar />
+        <main className="mx-auto w-full max-w-6xl flex-1 px-2.5 sm:px-6 pt-2.5 pb-4 sm:py-5 space-y-2.5 sm:space-y-4">
           <FleetStrip />
           <section
             id="circuito"
-            aria-label="Mesa operativa de unidad y rol"
-            className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start scroll-mt-20"
+            aria-label="Mesa operativa"
+            className="grid grid-cols-1 lg:grid-cols-12 lg:gap-5 items-start"
           >
-            <div className="lg:col-span-7 xl:col-span-8">
-              <TrailerCutaway />
+            <div className="lg:col-span-8">
+              <TrailerCutaway theme={theme} />
             </div>
-            <div className="lg:col-span-5 xl:col-span-4">
+            <div className="lg:col-span-4 lg:sticky lg:top-18">
               <RolePanelStage />
             </div>
           </section>
-          <CorridorVisibility />
         </main>
-        <Footer />
       </div>
     </SimulationProvider>
   );

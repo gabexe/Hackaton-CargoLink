@@ -51,3 +51,12 @@ body {
   color: var(--text-primary);
   overflow-x: clip;
 }
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
