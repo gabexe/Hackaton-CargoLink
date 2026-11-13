@@ -113,13 +113,22 @@ export function CorridorMap({ theme }: { theme: ThemeMode }) {
       map.removeLayer(tileLayerRef.current);
     }
 
-    // Free and reliable OpenStreetMap / Stadia style or Carto without watermark
-    const tileUrl = isDark
-      ? 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-      : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    // CartoDB tiles with optional user API key support, fallback to OpenStreetMap (100% free, zero watermarks)
+    const cartoApiKey = import.meta.env.VITE_CARTO_API_KEY as string | undefined;
+
+    let tileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+    let subdomains: string | string[] = 'abc';
+
+    if (cartoApiKey) {
+      tileUrl = isDark
+        ? `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?api_key=${cartoApiKey}`
+        : `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?api_key=${cartoApiKey}`;
+      subdomains = 'abcd';
+    }
 
     const tileLayer = L.tileLayer(tileUrl, {
       maxZoom: 19,
+      subdomains,
       attribution: '© OpenStreetMap contributors',
     }).addTo(map);
     tileLayerRef.current = tileLayer;
