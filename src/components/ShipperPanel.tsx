@@ -58,6 +58,7 @@ export function ShipperPanel() {
     selectRoute,
   } = useSimulation();
 
+  const [showDetailSettings, setShowDetailSettings] = useState(false);
   const [lastBookingCode, setLastBookingCode] = useState<string | null>(null);
   const [isCustomCategory, setIsCustomCategory] = useState(false);
   const [customCargoText, setCustomCargoText] = useState('');
@@ -346,68 +347,84 @@ export function ShipperPanel() {
         </div>
       </div>
 
-      {/* Cargo Category (Real Dry Freight Compatibility) + Protection */}
+      {/* Collapsible Spec Chip (Weight, Rubro, Insurance) */}
       <div className="space-y-1.5">
-        <div className="flex items-center gap-2">
-          <select
-            aria-label="Rubro de carga seca"
-            value={isCustomCategory ? 'Otro rubro seco (personalizado)' : draftCargoLabel}
-            onChange={(e) => handleCategoryChange(e.target.value)}
-            className="h-9 min-w-0 flex-1 cursor-pointer rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-2.5 text-xs font-medium text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[#276EF1]"
-          >
-            {COMPATIBLE_CARGO_CATEGORIES.map((opt) => (
-              <option key={opt} value={opt} className="bg-[var(--bg-surface)]">
-                {opt}
-              </option>
-            ))}
-          </select>
+        <button
+          type="button"
+          onClick={() => setShowDetailSettings(!showDetailSettings)}
+          className="flex w-full cursor-pointer items-center justify-between rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-3 py-2 text-xs transition-colors hover:border-[#276EF1]"
+        >
+          <span className="truncate text-[var(--text-secondary)]">
+            <strong className="text-[var(--text-primary)]">{draftPalletWeightKg} kg/mód.</strong> · {draftCargoLabel.split(' ')[0]} {hasCargoProtection ? '· Con seguro' : ''}
+          </span>
+          <span className="font-semibold text-[#276EF1] text-[11px] shrink-0 ml-2">
+            {showDetailSettings ? 'Listo' : 'Editar rubro'}
+          </span>
+        </button>
 
-          <button
-            type="button"
-            role="switch"
-            aria-checked={hasCargoProtection}
-            onClick={() => setHasCargoProtection(!hasCargoProtection)}
-            className={`inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition-colors ${
-              hasCargoProtection
-                ? 'border-[#276EF1] bg-[#276EF1]/10 text-[#276EF1]'
-                : 'border-[var(--border-hairline)] bg-[var(--bg-canvas)] text-[var(--text-secondary)]'
-            }`}
-          >
-            <ShieldCheck size={14} weight="regular" aria-hidden="true" />
-            <span>Seguro +2,5%</span>
-          </button>
-        </div>
+        {showDetailSettings && (
+          <div className="p-3 rounded-2xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] space-y-2.5">
+            <div className="flex items-center gap-2">
+              <select
+                aria-label="Rubro de carga seca"
+                value={isCustomCategory ? 'Otro rubro seco (personalizado)' : draftCargoLabel}
+                onChange={(e) => handleCategoryChange(e.target.value)}
+                className="h-9 min-w-0 flex-1 cursor-pointer rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] px-2.5 text-xs font-medium text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[#276EF1]"
+              >
+                {COMPATIBLE_CARGO_CATEGORIES.map((opt) => (
+                  <option key={opt} value={opt} className="bg-[var(--bg-surface)]">
+                    {opt}
+                  </option>
+                ))}
+              </select>
 
-        {isCustomCategory && (
-          <input
-            type="text"
-            placeholder="Especificá tipo de mercadería seca (ej. Bobinas de papel kraft)"
-            value={customCargoText}
-            onChange={(e) => handleCustomTextChange(e.target.value)}
-            className="h-9 w-full rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-3 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:ring-2 focus:ring-[#276EF1]"
-          />
-        )}
-
-        {/* Real Weight Selector per Module */}
-        <div className="flex items-center justify-between rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-2.5 py-1.5 text-xs">
-          <span className="text-[11px] text-[var(--text-secondary)]">Peso / mód.:</span>
-          <div className="flex items-center gap-1">
-            {WEIGHT_PRESETS.map((w) => (
               <button
-                key={w}
                 type="button"
-                onClick={() => setDraftCargo(draftCargoLabel, w)}
-                className={`rounded-lg px-2 py-0.5 font-mono text-[11px] font-semibold transition-colors ${
-                  draftPalletWeightKg === w
-                    ? 'bg-[#276EF1] text-[#FEFEFE]'
-                    : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                role="switch"
+                aria-checked={hasCargoProtection}
+                onClick={() => setHasCargoProtection(!hasCargoProtection)}
+                className={`inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition-colors ${
+                  hasCargoProtection
+                    ? 'border-[#276EF1] bg-[#276EF1]/10 text-[#276EF1]'
+                    : 'border-[var(--border-hairline)] bg-[var(--bg-surface)] text-[var(--text-secondary)]'
                 }`}
               >
-                {w} kg
+                <ShieldCheck size={14} weight="regular" aria-hidden="true" />
+                <span>Seguro +2,5%</span>
               </button>
-            ))}
+            </div>
+
+            {isCustomCategory && (
+              <input
+                type="text"
+                placeholder="Especificá tipo de mercadería seca..."
+                value={customCargoText}
+                onChange={(e) => handleCustomTextChange(e.target.value)}
+                className="h-9 w-full rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] px-3 text-xs text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[#276EF1]"
+              />
+            )}
+
+            <div className="flex items-center justify-between text-xs pt-1">
+              <span className="text-[11px] text-[var(--text-secondary)]">Peso por módulo:</span>
+              <div className="flex items-center gap-1">
+                {WEIGHT_PRESETS.map((w) => (
+                  <button
+                    key={w}
+                    type="button"
+                    onClick={() => setDraftCargo(draftCargoLabel, w)}
+                    className={`rounded-lg px-2.5 py-1 font-mono text-xs font-semibold cursor-pointer transition-colors ${
+                      draftPalletWeightKg === w
+                        ? 'bg-[#276EF1] text-[#FEFEFE]'
+                        : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                    }`}
+                  >
+                    {w} kg
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Compact Carbon Impact Pill (expandable) */}

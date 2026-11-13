@@ -11,6 +11,16 @@ export type TripStatus =
   | 'arrived'
   | 'delivered';
 
+export interface PushNotificationItem {
+  id: string;
+  title: string;
+  body: string;
+  timeLabel: string;
+  targetRole: UserRole;
+  badgeLabel?: string;
+  actionLabel?: string;
+}
+
 export interface PalletSlot {
   id: string;
   row: number;

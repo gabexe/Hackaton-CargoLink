@@ -21,6 +21,7 @@ import type {
   PackagingFormat,
   PalletSlot,
   PilotStats,
+  PushNotificationItem,
   RoadIncident,
   SimulationEvent,
   TripStatus,
@@ -52,6 +53,9 @@ export interface SimulationContextValue {
   hasCargoProtection: boolean;
   events: SimulationEvent[];
   handoffHint: HandoffHint | null;
+  activePushNotification: PushNotificationItem | null;
+  dismissPushNotification: () => void;
+  triggerNearDockAlert: (routeId: string) => void;
   inspectedSlotId: string | null;
   pilotStats: PilotStats;
   setActiveRole: (role: UserRole) => void;
@@ -391,7 +395,37 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
   const [hasCargoProtection, setHasCargoProtection] = useState<boolean>(false);
   const [events, setEvents] = useState<SimulationEvent[]>(INITIAL_EVENTS);
   const [handoffHint, setHandoffHint] = useState<HandoffHint | null>(null);
+  const [activePushNotification, setActivePushNotification] = useState<PushNotificationItem | null>(null);
   const [inspectedSlotId, setInspectedSlotId] = useState<string | null>(null);
+
+  const pushTimerRef = useRef<number | null>(null);
+
+  const dismissPushNotification = useCallback(() => {
+    if (pushTimerRef.current) {
+      window.clearTimeout(pushTimerRef.current);
+      pushTimerRef.current = null;
+    }
+    setActivePushNotification(null);
+  }, []);
+
+  const triggerPush = useCallback(
+    (item: Omit<PushNotificationItem, 'id' | 'timeLabel'>) => {
+      if (pushTimerRef.current) {
+        window.clearTimeout(pushTimerRef.current);
+      }
+      const newItem: PushNotificationItem = {
+        ...item,
+        id: `push-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        timeLabel: 'Ahora',
+      };
+      setActivePushNotification(newItem);
+      pushTimerRef.current = window.setTimeout(() => {
+        setActivePushNotification(null);
+        pushTimerRef.current = null;
+      }, 5500);
+    },
+    []
+  );
 
   const bookingCounterRef = useRef<number>(0);
   const backhaulCounterRef = useRef<number>(0);
@@ -576,6 +610,13 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         bookedCount === 1 ? 'módulo' : 'módulos'
       } (${bookedFormat}: ${bookedCargo}) - ${bookingCode}.`
     );
+    triggerPush({
+      targetRole: 'carrier',
+      title: '¡Nueva carga asignada en tu ruta!',
+      body: `Plásticos Polo 52 SA sumó ${bookedCount} mód. de ${bookedCargo} (+$ ${(bookedCount * activeRoute.pricePerPalletArs).toLocaleString('es-AR')}).`,
+      badgeLabel: bookingCode,
+      actionLabel: 'Ver en chofer',
+    });
     setHandoffHint({
       targetRole: 'carrier',
       routeId: targetRouteId,
@@ -587,6 +628,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
   }, [
     activeRoute,
     appendEvent,
+    triggerPush,
     draftCargoLabel,
     draftPackagingFormat,
     draftPalletWeightKg,
@@ -796,8 +838,15 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         target.code,
         `Estiba precintada en origen y salida a ruta (${target.carrierName}).`
       );
+      triggerPush({
+        targetRole: 'shipper',
+        title: 'Camión en camino hacia destino',
+        body: `Salida de dársena precintada. Próximo checkpoint: ${nextCity.split(',')[0]}.`,
+        badgeLabel: target.code,
+        actionLabel: 'Ver ruta',
+      });
     },
-    [appendEvent, routes, selectedRouteId]
+    [appendEvent, triggerPush, routes, selectedRouteId]
   );
 
   const advanceNextCheckpoint = useCallback(
@@ -1014,8 +1063,15 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         target.code,
         `Alerta vial con foto: ${incident.title} en ${incident.kmLocation} (+${incident.delayMinutes} min).`
       );
+      triggerPush({
+        targetRole: 'shipper',
+        title: 'Alerta de corte en ruta con foto',
+        body: `${incident.kmLocation}: demora de +${incident.delayMinutes} min reportada por conductor con evidencia.`,
+        badgeLabel: 'Desvío en curso',
+        actionLabel: 'Ver evidencia',
+      });
     },
-    [appendEvent, routes]
+    [appendEvent, triggerPush, routes]
   );
 
   const resolveRoadIncident = useCallback(
@@ -1082,8 +1138,15 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         target.code,
         `${target.receiverPlantName} asignó ${cleanDock} para recepción.`
       );
+      triggerPush({
+        targetRole: 'carrier',
+        title: `Dársena asignada: ${cleanDock}`,
+        body: `${target.receiverPlantName} preparó descarga en ${cleanDock}. Podés ingresar al arribar.`,
+        badgeLabel: cleanDock,
+        actionLabel: 'Ver chofer',
+      });
     },
-    [appendEvent, routes]
+    [appendEvent, triggerPush, routes]
   );
 
   const confirmDeliveryUnload = useCallback(
@@ -1133,8 +1196,61 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         target.code,
         `Descarga y conformidad registrada en ${target.receiverPlantName} (${finalDock}).`
       );
+      triggerPush({
+        targetRole: 'shipper',
+        title: '¡Carga entregada en destino!',
+        body: `Descarga finalizada en ${target.receiverPlantName} (${finalDock}). Certificado de huella disponible.`,
+        badgeLabel: 'Entregado',
+        actionLabel: 'Ver remito',
+      });
     },
-    [appendEvent, routes]
+    [appendEvent, triggerPush, routes]
+  );
+
+  const triggerNearDockAlert = useCallback(
+    (routeId: string) => {
+      const target = routes.find((route) => route.id === routeId);
+      if (!target) return;
+
+      const lastIdx = target.checkpoints.length - 1;
+      const approachCity = target.checkpoints[lastIdx - 1]?.city ?? target.destination;
+      const coords = resolveCityCoordinates(
+        approachCity,
+        target.privateTelemetry.lat,
+        target.privateTelemetry.lng
+      );
+
+      setRoutes((prev) =>
+        prev.map((route) => {
+          if (route.id !== routeId) return route;
+          return {
+            ...route,
+            tripStatus: 'near_dock',
+            privateTelemetry: {
+              ...route.privateTelemetry,
+              lat: coords.lat,
+              lng: coords.lng,
+              speedKmh: 42,
+            },
+          };
+        })
+      );
+
+      appendEvent(
+        'carrier',
+        target.code,
+        `Chofer activó botón "Próximo (<10 km)" rumbo a ${target.receiverPlantName}.`
+      );
+
+      triggerPush({
+        targetRole: 'receiver',
+        title: '¡Unidad a menos de 10 km!',
+        body: `${target.code} (${target.carrierName}) ingresó a geocerca de aproximación. Preparar rampa de descarga.`,
+        badgeLabel: '<10 km',
+        actionLabel: 'Asignar rampa',
+      });
+    },
+    [appendEvent, triggerPush, routes]
   );
 
   const toggleAutoSimulation = useCallback(() => {
@@ -1240,6 +1356,9 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       hasCargoProtection,
       events,
       handoffHint,
+      activePushNotification,
+      dismissPushNotification,
+      triggerNearDockAlert,
       inspectedSlotId,
       pilotStats,
       setActiveRole,
@@ -1272,11 +1391,15 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       canvasView,
       isAutoSimulating,
       selectedSlotIds,
+      draftPackagingFormat,
       draftCargoLabel,
       draftPalletWeightKg,
       hasCargoProtection,
       events,
       handoffHint,
+      activePushNotification,
+      dismissPushNotification,
+      triggerNearDockAlert,
       inspectedSlotId,
       pilotStats,
       setActiveRole,
