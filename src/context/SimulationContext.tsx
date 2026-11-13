@@ -56,6 +56,7 @@ export interface SimulationContextValue {
   activePushNotification: PushNotificationItem | null;
   dismissPushNotification: () => void;
   triggerNearDockAlert: (routeId: string) => void;
+  setRouteProgress: (routeId: string, progress: number) => void;
   inspectedSlotId: string | null;
   pilotStats: PilotStats;
   setActiveRole: (role: UserRole) => void;
@@ -805,6 +806,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
             tripStatus: 'in_transit',
             sealPhotoVerified: true,
             incident: null,
+            routeProgress: 0.05,
             privateTelemetry: {
               ...route.privateTelemetry,
               lat: coords.lat,
@@ -887,6 +889,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
             return {
               ...route,
               tripStatus: 'arrived',
+              routeProgress: 1.0,
               privateTelemetry: {
                 ...route.privateTelemetry,
                 lat: coords.lat,
@@ -934,6 +937,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
             return {
               ...route,
               tripStatus: 'near_dock',
+              routeProgress: 0.92,
               privateTelemetry: {
                 ...route.privateTelemetry,
                 lat: coords.lat,
@@ -972,9 +976,11 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
           if (route.id !== routeId) {
             return route;
           }
+          const progressStep = nextIdx / (checkpoints.length - 1);
           return {
             ...route,
             tripStatus: nextStatus,
+            routeProgress: progressStep,
             privateTelemetry: {
               ...route.privateTelemetry,
               lat: coords.lat,
@@ -1253,6 +1259,48 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     [appendEvent, triggerPush, routes]
   );
 
+  const setRouteProgress = useCallback(
+    (routeId: string, progress: number) => {
+      const clamped = Math.max(0, Math.min(1, progress));
+      setRoutes((prev) =>
+        prev.map((r) => {
+          if (r.id !== routeId) return r;
+          const cps = r.checkpoints;
+          const numCps = cps.length;
+          const updatedCps = cps.map((cp, idx) => {
+            const cpRatio = numCps > 1 ? idx / (numCps - 1) : 0;
+            if (clamped >= cpRatio + 0.05) {
+              return { ...cp, status: 'passed' as const };
+            }
+            if (clamped >= cpRatio - 0.08 || (idx === 0 && clamped < 0.1)) {
+              return { ...cp, status: 'current' as const };
+            }
+            return { ...cp, status: 'upcoming' as const };
+          });
+
+          let newTripStatus = r.tripStatus;
+          if (r.tripStatus === 'in_transit' || r.tripStatus === 'near_dock') {
+            if (clamped >= 0.88 && clamped < 0.99) {
+              newTripStatus = 'near_dock';
+            } else if (clamped >= 0.99) {
+              newTripStatus = 'arrived';
+            } else {
+              newTripStatus = 'in_transit';
+            }
+          }
+
+          return {
+            ...r,
+            routeProgress: clamped,
+            tripStatus: newTripStatus,
+            checkpoints: updatedCps,
+          };
+        })
+      );
+    },
+    []
+  );
+
   const toggleAutoSimulation = useCallback(() => {
     setIsAutoSimulating((prev) => !prev);
   }, []);
@@ -1269,17 +1317,49 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const timer = window.setTimeout(() => {
-      advanceNextCheckpoint(activeRoute.id);
-    }, 2400);
+    let lastTimestamp = performance.now();
+    let animId = 0;
 
-    return () => window.clearTimeout(timer);
+    const frame = (now: number) => {
+      const dt = Math.min(0.1, (now - lastTimestamp) / 1000);
+      lastTimestamp = now;
+
+      const currentProgress = activeRoute.routeProgress ?? 0.15;
+      // Advance ~0.04 per second (~25 seconds total end-to-end trip)
+      const nextProgress = currentProgress + dt * 0.04;
+
+      if (nextProgress >= 1.0) {
+        setRouteProgress(activeRoute.id, 1.0);
+        setIsAutoSimulating(false);
+        appendEvent(
+          'carrier',
+          activeRoute.code,
+          `Unidad arribó a dársena destino en ${activeRoute.receiverPlantName}.`
+        );
+        setHandoffHint({
+          targetRole: 'receiver',
+          routeId: activeRoute.id,
+          message: `${activeRoute.code} arribó a ${activeRoute.receiverPlantName}. Confirmá dársena y descarga.`,
+          ctaLabel: 'Ir a Planta Receptora',
+        });
+        return;
+      }
+
+      setRouteProgress(activeRoute.id, nextProgress);
+      animId = window.requestAnimationFrame(frame);
+    };
+
+    animId = window.requestAnimationFrame(frame);
+    return () => window.cancelAnimationFrame(animId);
   }, [
     isAutoSimulating,
     activeRoute.id,
     activeRoute.tripStatus,
-    activeRoute.checkpoints,
-    advanceNextCheckpoint,
+    activeRoute.routeProgress,
+    activeRoute.code,
+    activeRoute.receiverPlantName,
+    setRouteProgress,
+    appendEvent,
   ]);
 
   const dismissHandoffHint = useCallback(() => {
@@ -1359,6 +1439,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       activePushNotification,
       dismissPushNotification,
       triggerNearDockAlert,
+      setRouteProgress,
       inspectedSlotId,
       pilotStats,
       setActiveRole,
@@ -1400,6 +1481,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       activePushNotification,
       dismissPushNotification,
       triggerNearDockAlert,
+      setRouteProgress,
       inspectedSlotId,
       pilotStats,
       setActiveRole,

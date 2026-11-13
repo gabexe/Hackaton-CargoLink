@@ -35,7 +35,15 @@ function getTargetProgress(
   return baseRatio;
 }
 
-export function CorridorMap({ theme }: { theme: ThemeMode }) {
+export function CorridorMap({
+  theme,
+  className,
+  hideFloatingControls = false,
+}: {
+  theme: ThemeMode;
+  className?: string;
+  hideFloatingControls?: boolean;
+}) {
   const {
     activeRoute,
     activeRole,
@@ -64,10 +72,12 @@ export function CorridorMap({ theme }: { theme: ThemeMode }) {
   const isInMotion =
     activeRoute.tripStatus === 'in_transit' || activeRoute.tripStatus === 'near_dock';
 
-  const targetProgress = useMemo(
-    () => getTargetProgress(activeRoute.tripStatus, activeRoute.checkpoints),
-    [activeRoute.tripStatus, activeRoute.checkpoints]
-  );
+  const targetProgress = useMemo(() => {
+    if (activeRoute.routeProgress !== undefined) {
+      return activeRoute.routeProgress;
+    }
+    return getTargetProgress(activeRoute.tripStatus, activeRoute.checkpoints);
+  }, [activeRoute.routeProgress, activeRoute.tripStatus, activeRoute.checkpoints]);
 
   const animProgressRef = useRef<number>(targetProgress);
 
@@ -133,8 +143,16 @@ export function CorridorMap({ theme }: { theme: ThemeMode }) {
     }).addTo(map);
     tileLayerRef.current = tileLayer;
 
+    // Responsive size invalidation
+    const resizeObserver = new ResizeObserver(() => {
+      map.invalidateSize();
+    });
+    if (mapContainerRef.current) {
+      resizeObserver.observe(mapContainerRef.current);
+    }
+
     return () => {
-      // Map instance cleaned up on unmount
+      resizeObserver.disconnect();
     };
   }, [isDark]);
 
@@ -352,91 +370,99 @@ export function CorridorMap({ theme }: { theme: ThemeMode }) {
   const nextCp = checkpoints[Math.min(checkpoints.length - 1, currentIdx + 1)] ?? checkpoints[checkpoints.length - 1];
 
   return (
-    <div className="relative h-[280px] sm:h-[340px] lg:h-[420px] w-full overflow-hidden rounded-2xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)]">
+    <div
+      className={`relative w-full overflow-hidden rounded-2xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] ${
+        className ?? 'h-[280px] sm:h-[340px] lg:h-[420px]'
+      }`}
+    >
       {/* Real Interactive Leaflet Container */}
       <div ref={mapContainerRef} className="h-full w-full z-0" />
 
-      {/* Top HUD: Carrier navigation banner vs Shipper/Receiver Privacy Checkpoint banner */}
-      <div className="absolute left-2.5 right-2.5 top-12 sm:top-13 z-10 flex items-center justify-between gap-2">
-        {isCarrier ? (
-          <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl bg-[#141414]/92 px-3 py-2 text-[#F6F6F6] shadow-md backdrop-blur-md dark:bg-[#19191B]/95 dark:border dark:border-[var(--border-hairline)]">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#276EF1] text-[#FEFEFE]">
-              <NavigationArrow size={15} weight="bold" aria-hidden="true" />
+      {/* Top HUD: Hidden when parent requested or showing role-specific HUD */}
+      {!hideFloatingControls && (
+        <div className="absolute left-2.5 right-2.5 top-3 sm:top-3.5 z-10 flex items-center justify-between gap-2">
+          {isCarrier ? (
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl bg-[#141414]/92 px-3 py-2 text-[#F6F6F6] shadow-md backdrop-blur-md dark:bg-[#19191B]/95 dark:border dark:border-[var(--border-hairline)]">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#276EF1] text-[#FEFEFE]">
+                <NavigationArrow size={15} weight="bold" aria-hidden="true" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-semibold">
+                  {activeRoute.tripStatus === 'docked'
+                    ? `En dársena · ${activeRoute.origin.split(',')[0]}`
+                    : activeRoute.tripStatus === 'arrived' || activeRoute.tripStatus === 'delivered'
+                      ? `Arribo · ${activeRoute.receiverPlantName}`
+                      : `Hacia ${nextCp?.city.split(',')[0]}`}
+                </p>
+                <p className="truncate font-mono text-[11px] opacity-80">
+                  {roadKm} km de ruta real (OSRM) · {activeRoute.privateTelemetry.speedKmh} km/h
+                </p>
+              </div>
+              {isInMotion && (
+                <button
+                  type="button"
+                  onClick={toggleAutoSimulation}
+                  className="inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-full bg-[#276EF1] px-2.5 text-[11px] font-semibold text-[#FEFEFE] transition-colors hover:bg-[#1E5BD6]"
+                >
+                  {isAutoSimulating ? (
+                    <>
+                      <Pause size={11} weight="bold" aria-hidden="true" />
+                      <span>Pausa</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play size={11} weight="bold" aria-hidden="true" />
+                      <span>Auto</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold">
-                {activeRoute.tripStatus === 'docked'
-                  ? `En dársena · ${activeRoute.origin.split(',')[0]}`
-                  : activeRoute.tripStatus === 'arrived' || activeRoute.tripStatus === 'delivered'
-                    ? `Arribo · ${activeRoute.receiverPlantName}`
-                    : `Hacia ${nextCp?.city.split(',')[0]}`}
-              </p>
-              <p className="truncate font-mono text-[11px] opacity-80">
-                {roadKm} km de ruta real (OSRM) · {activeRoute.privateTelemetry.speedKmh} km/h
-              </p>
+          ) : (
+            <div className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)]/95 px-3 py-2 text-xs shadow-md backdrop-blur-md">
+              <div className="flex min-w-0 items-center gap-2">
+                <LockSimple size={14} weight="regular" className="shrink-0 text-[#276EF1]" aria-hidden="true" />
+                <p className="truncate font-medium text-[var(--text-primary)]">
+                  Hito: {currentCp?.city.split(',')[0]} (GPS protegido)
+                </p>
+              </div>
+              {activeRoute.tripStatus === 'near_dock' && (
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#276EF1] px-2 py-0.5 font-mono text-[10px] font-semibold text-[#FEFEFE]">
+                  <MapPin size={11} weight="bold" aria-hidden="true" />
+                  <span>&lt;10 km real</span>
+                </span>
+              )}
             </div>
-            {isInMotion && (
-              <button
-                type="button"
-                onClick={toggleAutoSimulation}
-                className="inline-flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-full bg-[#276EF1] px-2.5 text-[11px] font-semibold text-[#FEFEFE] transition-colors hover:bg-[#1E5BD6]"
-              >
-                {isAutoSimulating ? (
-                  <>
-                    <Pause size={11} weight="bold" aria-hidden="true" />
-                    <span>Pausa</span>
-                  </>
-                ) : (
-                  <>
-                    <Play size={11} weight="bold" aria-hidden="true" />
-                    <span>Auto</span>
-                  </>
-                )}
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-surface)]/95 px-3 py-2 text-xs shadow-md backdrop-blur-md">
-            <div className="flex min-w-0 items-center gap-2">
-              <LockSimple size={14} weight="regular" className="shrink-0 text-[#276EF1]" aria-hidden="true" />
-              <p className="truncate font-medium text-[var(--text-primary)]">
-                Hito: {currentCp?.city.split(',')[0]} (GPS protegido)
-              </p>
-            </div>
-            {activeRoute.tripStatus === 'near_dock' && (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#276EF1] px-2 py-0.5 font-mono text-[10px] font-semibold text-[#FEFEFE]">
-                <MapPin size={11} weight="bold" aria-hidden="true" />
-                <span>&lt;10 km real</span>
+          )}
+        </div>
+      )}
+
+      {/* Floating Bottom Strip: Real telemetry */}
+      {!hideFloatingControls && (
+        <div className="absolute bottom-3 left-3 right-3 z-10 flex items-center justify-between gap-2 pointer-events-none">
+          <button
+            type="button"
+            onClick={() => setIsBuilderOpen(true)}
+            className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-[var(--border-hairline)] bg-[var(--bg-surface)]/95 px-3 py-1.5 text-xs font-semibold text-[var(--text-primary)] shadow-md backdrop-blur-md hover:border-[#276EF1] cursor-pointer"
+          >
+            <Compass size={14} weight="regular" className="text-[#276EF1]" aria-hidden="true" />
+            <span>Configurar ruta real</span>
+          </button>
+
+          {activeRoute.tripStatus === 'incident' && activeRoute.incident ? (
+            <div className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-[var(--border-hairline)] bg-[var(--bg-surface)]/95 px-2.5 py-1 text-[11px] shadow-sm backdrop-blur-sm">
+              <Warning size={13} weight="bold" className="text-[#D97706] shrink-0" aria-hidden="true" />
+              <span className="font-medium text-[var(--text-primary)]">
+                {activeRoute.incident.kmLocation} (+{activeRoute.incident.delayMinutes} min)
               </span>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Floating Bottom Strip: Real telemetry & Real Route Configurator Button */}
-      <div className="absolute bottom-4 left-3 right-3 z-10 flex items-center justify-between gap-2 pointer-events-none">
-        <button
-          type="button"
-          onClick={() => setIsBuilderOpen(true)}
-          className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-[var(--border-hairline)] bg-[var(--bg-surface)]/95 px-3 py-1.5 text-xs font-semibold text-[var(--text-primary)] shadow-md backdrop-blur-md hover:border-[#276EF1] cursor-pointer"
-        >
-          <Compass size={14} weight="regular" className="text-[#276EF1]" aria-hidden="true" />
-          <span>Configurar ruta real</span>
-        </button>
-
-        {activeRoute.tripStatus === 'incident' && activeRoute.incident ? (
-          <div className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-[var(--border-hairline)] bg-[var(--bg-surface)]/95 px-2.5 py-1 text-[11px] shadow-sm backdrop-blur-sm">
-            <Warning size={13} weight="bold" className="text-[#D97706] shrink-0" aria-hidden="true" />
-            <span className="font-medium text-[var(--text-primary)]">
-              {activeRoute.incident.kmLocation} (+{activeRoute.incident.delayMinutes} min)
-            </span>
-          </div>
-        ) : (
-          <div className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-hairline)] bg-[var(--bg-surface)]/90 px-2.5 py-1 font-mono text-[10px] text-[var(--text-secondary)] shadow-sm backdrop-blur-sm">
-            <span>OSRM {roadKm} km · OpenStreetMap</span>
-          </div>
-        )}
-      </div>
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-hairline)] bg-[var(--bg-surface)]/90 px-2.5 py-1 font-mono text-[10px] text-[var(--text-secondary)] shadow-sm backdrop-blur-sm">
+              <span>OSRM {roadKm} km · OpenStreetMap</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Route Builder Modal */}
       <RouteBuilderModal

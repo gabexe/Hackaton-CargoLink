@@ -87,6 +87,7 @@ export interface CorridorRoute {
   checkpoints: CorridorCheckpoint[];
   routeGeometry?: Array<[number, number]>;
   distanceKm?: number;
+  routeProgress?: number;
 }
 
 export interface CarbonEstimate {

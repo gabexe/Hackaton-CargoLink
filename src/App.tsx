@@ -32,7 +32,7 @@ function MainWorkstage({ theme }: { theme: ThemeMode }) {
   const { activeRole, activeRoute } = useSimulation();
   const shouldReduceMotion = useReducedMotion();
 
-  // Role 2: Carrier (Chofer) -> Dedicated Phone Simulator
+  // Role 2: Carrier (Chofer) -> Full Viewport Responsive Navigation Console
   if (activeRole === 'carrier') {
     return (
       <div className="w-full">
@@ -41,8 +41,17 @@ function MainWorkstage({ theme }: { theme: ThemeMode }) {
     );
   }
 
-  // Role 1 & 3: Shipper (Dador) and Receiver (Planta)
-  const isShipperInTransit = activeRole === 'shipper' && activeRoute.tripStatus !== 'docked';
+  // Role 3: Receiver (Planta Receptora) -> Dedicated Intake & Dock Dashboard
+  if (activeRole === 'receiver') {
+    return (
+      <div className="w-full">
+        <ReceiverPanel theme={theme} />
+      </div>
+    );
+  }
+
+  // Role 1: Shipper (Dador PyME)
+  const isShipperInTransit = activeRoute.tripStatus !== 'docked';
 
   return (
     <section
@@ -73,7 +82,7 @@ function MainWorkstage({ theme }: { theme: ThemeMode }) {
               exit={shouldReduceMotion ? undefined : { opacity: 0, y: -4 }}
               transition={shouldReduceMotion ? { duration: 0 } : { duration: 0.14, ease: 'easeOut' }}
             >
-              {activeRole === 'shipper' ? <ShipperPanel /> : <ReceiverPanel />}
+              <ShipperPanel />
             </motion.div>
           </AnimatePresence>
         </div>

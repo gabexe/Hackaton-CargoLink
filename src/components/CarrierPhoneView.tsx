@@ -10,7 +10,6 @@ import {
   Pause,
   Play,
   Plus,
-  Warning,
   X,
 } from '@phosphor-icons/react';
 import { useSimulation } from '../context/SimulationContext';
@@ -36,6 +35,7 @@ function formatArs(amount: number): string {
 export function CarrierPhoneView({ theme }: { theme: ThemeMode }) {
   const {
     activeRoute,
+    setActiveRole,
     startRouteTrip,
     advanceNextCheckpoint,
     triggerNearDockAlert,
@@ -58,7 +58,6 @@ export function CarrierPhoneView({ theme }: { theme: ThemeMode }) {
   const occupiedSlots = activeRoute.slots.filter((s) => s.status !== 'available');
   const revenueArs = occupiedSlots.length * activeRoute.pricePerPalletArs;
   const routeCarbon = estimateCarbonSavings(activeRoute, occupiedSlots.length);
-
   const isInMotion = activeRoute.tripStatus === 'in_transit' || activeRoute.tripStatus === 'near_dock';
 
   const handleSendIncident = () => {
@@ -86,67 +85,99 @@ export function CarrierPhoneView({ theme }: { theme: ThemeMode }) {
   };
 
   return (
-    <div className="w-full flex justify-center py-0 sm:py-2">
-      {/* Mobile Frame Simulation (Only decorative on desktop; seamless on mobile) */}
-      <div className="w-full sm:max-w-[400px] rounded-none sm:rounded-[38px] border-0 sm:border-[5px] border-[var(--border-hairline)] sm:shadow-2xl bg-[var(--bg-canvas)] overflow-hidden flex flex-col h-[680px] sm:h-[720px] relative">
-        {/* Fake Phone Status Bar */}
-        <div className="hidden sm:flex h-6 items-center justify-between px-5 pt-1.5 text-[10px] font-semibold text-[var(--text-secondary)] select-none z-30">
-          <span>9:41</span>
-          <div className="flex items-center gap-1.5">
-            <span className="font-mono text-[9px]">LTE</span>
-            <div className="h-2 w-4 rounded-sm border border-current p-0.5">
-              <div className="h-full w-2.5 bg-current rounded-xs" />
+    <div className="w-full flex flex-col space-y-4">
+      {/* Driver Clean Hero HUD */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-4 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#276EF1] text-[#FEFEFE]">
+            <NavigationArrow size={20} weight="bold" aria-hidden="true" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-[#276EF1]" />
+              <span className="text-xs font-mono font-semibold text-[var(--text-secondary)]">
+                {activeRoute.code} · Chofer {activeRoute.privateTelemetry.driverName.split(' ')[0]}
+              </span>
             </div>
+            <h2 className="text-base sm:text-lg font-bold text-[var(--text-primary)] truncate">
+              {activeRoute.tripStatus === 'docked'
+                ? `Cargar en ${activeRoute.origin.split(',')[0]}`
+                : activeRoute.tripStatus === 'near_dock'
+                  ? `Llegando a ${activeRoute.receiverPlantName}`
+                  : activeRoute.tripStatus === 'arrived'
+                    ? `En dársena: ${activeRoute.assignedDock ?? 'Dársena 1'}`
+                    : activeRoute.tripStatus === 'delivered'
+                      ? 'Viaje completado'
+                      : `Hacia ${nextCp?.city.split(',')[0]} (Parada ${currentIdx + 1} de ${checkpoints.length})`}
+            </h2>
           </div>
         </div>
 
-        {/* Top Floating App Bar (Uber Driver style) */}
-        <div className="absolute top-2 sm:top-7 left-3 right-3 z-30 flex items-center justify-between gap-2">
-          {/* Driver identity pill */}
-          <div className="flex items-center gap-2 rounded-full border border-[var(--border-hairline)] bg-[var(--bg-surface)]/95 px-3 py-1 shadow-md backdrop-blur-md">
-            <span className="h-2 w-2 rounded-full bg-[#276EF1]" />
-            <span className="text-xs font-bold text-[var(--text-primary)]">
-              {activeRoute.privateTelemetry.driverName.split(' ')[0]} (Chofer)
-            </span>
-          </div>
+        {/* Action Pills & Mode Toggle */}
+        <div className="flex items-center gap-2">
+          {isInMotion && (
+            <button
+              type="button"
+              onClick={toggleAutoSimulation}
+              className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold cursor-pointer transition-colors ${
+                isAutoSimulating
+                  ? 'bg-[#141414] text-[#FEFEFE] dark:bg-[#F5F5F7] dark:text-[#111112]'
+                  : 'bg-[#276EF1] text-[#FEFEFE] hover:bg-[#1E5BD6]'
+              }`}
+            >
+              {isAutoSimulating ? (
+                <>
+                  <Pause size={13} weight="bold" aria-hidden="true" />
+                  <span>Pausar recorrido</span>
+                </>
+              ) : (
+                <>
+                  <Play size={13} weight="bold" aria-hidden="true" />
+                  <span>Simular en vivo</span>
+                </>
+              )}
+            </button>
+          )}
 
-          {/* View toggle (Map vs 3D) */}
-          <div className="flex items-center rounded-full border border-[var(--border-hairline)] bg-[var(--bg-surface)]/95 p-0.5 shadow-md backdrop-blur-md">
+          <div className="inline-flex rounded-full border border-[var(--border-hairline)] bg-[var(--bg-canvas)] p-0.5">
             <button
               type="button"
               onClick={() => setViewMode('map')}
-              className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold cursor-pointer transition-colors ${
+              className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium cursor-pointer transition-colors ${
                 viewMode === 'map'
                   ? 'bg-[#276EF1] text-[#FEFEFE]'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
-              <MapTrifold size={12} weight="bold" />
+              <MapTrifold size={14} weight="bold" />
               <span>Mapa</span>
             </button>
             <button
               type="button"
               onClick={() => setViewMode('3d')}
-              className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold cursor-pointer transition-colors ${
+              className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium cursor-pointer transition-colors ${
                 viewMode === '3d'
                   ? 'bg-[#141414] text-[#F6F6F6] dark:bg-[#F5F5F7] dark:text-[#111112]'
                   : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}
             >
-              <Cube size={12} weight="bold" />
+              <Cube size={14} weight="bold" />
               <span>Estiba 3D</span>
             </button>
           </div>
         </div>
+      </div>
 
-        {/* Viewport Center: Full-height Leaflet or 3D */}
-        <div className="flex-1 w-full relative z-0">
+      {/* Main Grid: Responsive 100% Map on Left/Top + Generous Driver Control on Right/Bottom */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+        {/* Full Height Map with zero void space */}
+        <div className="lg:col-span-8 flex flex-col min-h-[380px] sm:min-h-[460px] lg:min-h-[520px]">
           {viewMode === 'map' ? (
-            <div className="h-full w-full">
-              <CorridorMap theme={theme} />
+            <div className="flex-1 w-full h-full">
+              <CorridorMap theme={theme} className="h-full min-h-[380px] sm:min-h-[460px] lg:min-h-[520px]" />
             </div>
           ) : (
-            <div className="h-full w-full pt-10">
+            <div className="flex-1 w-full h-full rounded-2xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] overflow-hidden">
               <Suspense fallback={<div className="h-full flex items-center justify-center text-xs text-[var(--text-secondary)]">Cargando 3D...</div>}>
                 <TruckScene3D theme={theme} />
               </Suspense>
@@ -154,94 +185,109 @@ export function CarrierPhoneView({ theme }: { theme: ThemeMode }) {
           )}
         </div>
 
-        {/* Bottom Operational Sheet (Uber Driver / Mercado Libre Transporte style) */}
-        <div className="z-20 border-t border-[var(--border-hairline)] bg-[var(--bg-surface)] px-4 pt-3 pb-4 shadow-xl space-y-2.5">
-          {/* Trip heading & next stop */}
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-mono text-[var(--text-secondary)]">
-                {activeRoute.code} · Parada {currentIdx + 1} de {checkpoints.length}
-              </p>
-              <h3 className="text-sm font-bold text-[var(--text-primary)] leading-tight">
-                {activeRoute.tripStatus === 'docked'
-                  ? `Cargar en ${activeRoute.origin.split(',')[0]}`
-                  : activeRoute.tripStatus === 'near_dock'
-                    ? `Aproximando a ${activeRoute.receiverPlantName}`
-                    : activeRoute.tripStatus === 'arrived'
-                      ? `En dársena: ${activeRoute.assignedDock ?? 'Dársena 1'}`
-                      : activeRoute.tripStatus === 'delivered'
-                        ? 'Viaje finalizado con conformidad'
-                        : `Hacia ${nextCp?.city.split(',')[0]}`}
-              </h3>
+        {/* Driver Operational Console */}
+        <div className="lg:col-span-4 flex flex-col justify-between rounded-2xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-5 shadow-sm space-y-4">
+          <div className="space-y-4">
+            {/* Metric Summary Cards */}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] p-2.5">
+                <span className="block text-[10px] text-[var(--text-secondary)]">Ocupación</span>
+                <span className="font-mono text-xs sm:text-sm font-bold text-[var(--text-primary)]">
+                  {occupiedSlots.length}/12 mód.
+                </span>
+              </div>
+              <div className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] p-2.5">
+                <span className="block text-[10px] text-[var(--text-secondary)]">Ingreso viaje</span>
+                <span className="font-mono text-xs sm:text-sm font-bold text-[var(--text-primary)]">
+                  {formatArs(revenueArs)}
+                </span>
+              </div>
+              <div className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] p-2.5">
+                <span className="block text-[10px] text-[var(--text-secondary)]">CO2e evitado</span>
+                <span className="font-mono text-xs sm:text-sm font-bold text-[#276EF1]">
+                  -{routeCarbon.co2SavedKg} kg
+                </span>
+              </div>
             </div>
 
-            {/* Compact Retorno button */}
-            <button
-              type="button"
-              onClick={() => setShowBackhaulModal(true)}
-              className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text-primary)] hover:border-[#276EF1]"
-            >
-              <Plus size={11} weight="bold" />
-              <span>Retorno</span>
-            </button>
+            {/* Checkpoint Status List */}
+            <div className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] p-3 space-y-2">
+              <span className="text-[11px] font-semibold text-[var(--text-secondary)]">Progreso de ruta</span>
+              <div className="space-y-1.5">
+                {checkpoints.map((cp) => {
+                  const isCurrent = cp.status === 'current';
+                  const isPassed = cp.status === 'passed';
+                  return (
+                    <div key={cp.city} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`h-2 w-2 rounded-full ${
+                            isCurrent
+                              ? 'bg-[#276EF1] ring-2 ring-[#276EF1]/30'
+                              : isPassed
+                                ? 'bg-[var(--text-secondary)]'
+                                : 'bg-[var(--border-hairline)]'
+                          }`}
+                        />
+                        <span className={`font-medium ${isCurrent ? 'text-[var(--text-primary)] font-bold' : 'text-[var(--text-secondary)]'}`}>
+                          {cp.city.split(',')[0]}
+                        </span>
+                      </div>
+                      <span className="font-mono text-[11px] text-[var(--text-secondary)]">
+                        km {cp.kmFromOrigin}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
-          {/* 3 Metric Pills Row */}
-          <div className="grid grid-cols-3 gap-1.5 text-center">
-            <div className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] py-1.5">
-              <span className="block text-[9px] text-[var(--text-secondary)]">Carga</span>
-              <span className="font-mono text-xs font-bold text-[var(--text-primary)]">
-                {occupiedSlots.length}/12 mód.
-              </span>
-            </div>
-            <div className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] py-1.5">
-              <span className="block text-[9px] text-[var(--text-secondary)]">Ingreso</span>
-              <span className="font-mono text-xs font-bold text-[var(--text-primary)]">
-                {formatArs(revenueArs)}
-              </span>
-            </div>
-            <div className="rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] py-1.5">
-              <span className="block text-[9px] text-[var(--text-secondary)]">CO2e evitado</span>
-              <span className="font-mono text-xs font-bold text-[#276EF1]">
-                -{routeCarbon.co2SavedKg} kg
-              </span>
-            </div>
-          </div>
-
-          {/* Primary Action Button by stage (En camino -> Próximo <10 km -> Dársena) */}
-          <div className="space-y-2 pt-1">
+          {/* Action Area */}
+          <div className="space-y-2 pt-2">
             {activeRoute.tripStatus === 'docked' && (
               <ActionButton
                 variant="dark"
                 onClick={() => startRouteTrip(activeRoute.id)}
                 confirmedLabel="Salida precintada"
-                className="w-full min-h-[46px]"
+                className="w-full min-h-[48px]"
               >
-                <span>En camino (Iniciar viaje)</span>
-                <NavigationArrow size={15} weight="bold" />
+                <span>Iniciar recorrido precintado</span>
+                <ArrowRight size={16} weight="bold" />
               </ActionButton>
             )}
 
             {activeRoute.tripStatus === 'in_transit' && (
-              <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => advanceNextCheckpoint(activeRoute.id)}
+                    className="flex min-h-[48px] cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-3 text-xs font-semibold text-[var(--text-primary)] hover:border-[#276EF1]"
+                  >
+                    <span>Paso {nextCp?.city.split(',')[0]}</span>
+                    <ArrowRight size={13} weight="bold" />
+                  </button>
+
+                  <ActionButton
+                    variant="primary"
+                    onClick={() => triggerNearDockAlert(activeRoute.id)}
+                    confirmedLabel="Planta notificada"
+                    className="min-h-[48px]"
+                  >
+                    <MapPin size={15} weight="bold" />
+                    <span>Avisar (&lt;10 km)</span>
+                  </ActionButton>
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => advanceNextCheckpoint(activeRoute.id)}
-                  className="flex min-h-[46px] cursor-pointer items-center justify-center gap-1 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-3 text-xs font-semibold text-[var(--text-primary)] hover:border-[#276EF1]"
+                  onClick={() => setShowIncidentModal(true)}
+                  className="flex min-h-[38px] w-full cursor-pointer items-center justify-center gap-1.5 rounded-full border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-4 py-1.5 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                 >
-                  <span>Paso {nextCp?.city.split(',')[0]}</span>
-                  <ArrowRight size={13} weight="bold" />
+                  <Camera size={14} weight="regular" aria-hidden="true" />
+                  <span>Reportar corte en ruta con foto</span>
                 </button>
-
-                <ActionButton
-                  variant="primary"
-                  onClick={() => triggerNearDockAlert(activeRoute.id)}
-                  confirmedLabel="Planta notificada"
-                  className="min-h-[46px]"
-                >
-                  <MapPin size={15} weight="bold" />
-                  <span>Próximo (&lt;10 km)</span>
-                </ActionButton>
               </div>
             )}
 
@@ -250,7 +296,7 @@ export function CarrierPhoneView({ theme }: { theme: ThemeMode }) {
                 variant="primary"
                 onClick={() => advanceNextCheckpoint(activeRoute.id)}
                 confirmedLabel="Arribo confirmado"
-                className="w-full min-h-[46px]"
+                className="w-full min-h-[48px]"
               >
                 <CheckCircle size={16} weight="bold" />
                 <span>Confirmar llegada a dársena</span>
@@ -258,133 +304,163 @@ export function CarrierPhoneView({ theme }: { theme: ThemeMode }) {
             )}
 
             {activeRoute.tripStatus === 'arrived' && (
-              <div className="rounded-xl bg-[#276EF1]/10 border border-[#276EF1]/30 p-2.5 text-center text-xs text-[#276EF1] font-semibold">
-                Esperando descarga en {activeRoute.assignedDock ?? 'Dársena 1'} (Planta)
+              <ActionButton
+                variant="primary"
+                onClick={() => setActiveRole('receiver')}
+                confirmedLabel="Abriendo Planta"
+                className="w-full min-h-[48px]"
+              >
+                <span>Pasar a recepción en Planta</span>
+                <ArrowRight size={15} weight="bold" />
+              </ActionButton>
+            )}
+
+            {activeRoute.tripStatus === 'delivered' && (
+              <div className="flex items-center gap-2 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] p-3 text-xs font-medium text-[var(--text-primary)]">
+                <CheckCircle size={18} weight="bold" className="text-[#276EF1] shrink-0" aria-hidden="true" />
+                <span>Viaje liquidado con conformidad en destino ({formatArs(revenueArs)})</span>
               </div>
             )}
 
-            {/* Quick Road Incident Button with Mandatory Photo */}
-            {isInMotion && (
-              <div className="flex items-center justify-between gap-2 pt-0.5">
-                <button
-                  type="button"
-                  onClick={() => setShowIncidentModal(true)}
-                  className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-semibold text-[var(--text-secondary)] hover:text-[#D97706]"
-                >
-                  <Camera size={13} weight="bold" />
-                  <span>Reportar corte con foto</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={toggleAutoSimulation}
-                  className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-[var(--bg-subtle)] px-2.5 py-1 text-[10px] font-semibold text-[var(--text-primary)]"
-                >
-                  {isAutoSimulating ? (
-                    <>
-                      <Pause size={10} weight="bold" />
-                      <span>Simulación activa</span>
-                    </>
-                  ) : (
-                    <>
-                      <Play size={10} weight="bold" />
-                      <span>Simulación auto</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            )}
+            {/* Backhaul button */}
+            <button
+              type="button"
+              onClick={() => setShowBackhaulModal(true)}
+              className="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-full border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-3 py-2 text-xs font-semibold text-[var(--text-primary)] hover:border-[#276EF1]"
+            >
+              <Plus size={13} weight="bold" />
+              <span>Publicar retorno vacío</span>
+            </button>
           </div>
         </div>
+      </div>
 
-        {/* Modal Corte de Ruta con Foto */}
-        {showIncidentModal && (
-          <div className="absolute inset-0 z-40 bg-[#141414]/70 p-4 flex items-center justify-center backdrop-blur-xs">
-            <div className="w-full rounded-2xl bg-[var(--bg-surface)] p-4 border border-[var(--border-hairline)] space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-[#D97706]">
-                  <Warning size={16} weight="bold" />
-                  <h4 className="text-xs font-bold text-[var(--text-primary)]">
-                    Reportar corte de ruta (Foto requerida)
-                  </h4>
-                </div>
-                <button type="button" onClick={() => setShowIncidentModal(false)} className="text-[var(--text-secondary)]">
-                  <X size={15} weight="bold" />
-                </button>
-              </div>
-
+      {/* Incident Modal */}
+      {showIncidentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-sm rounded-2xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-[var(--text-primary)]">Reportar corte preventivo</h3>
+              <button
+                type="button"
+                onClick={() => setShowIncidentModal(false)}
+                className="cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              >
+                <X size={16} weight="bold" />
+              </button>
+            </div>
+            <div className="space-y-3">
               <img
                 src="/images/incident-road-block.jpg"
-                alt="Foto del corte en ruta"
-                className="w-full h-24 rounded-xl object-cover border border-[var(--border-hairline)]"
+                alt="Corte en calzada"
+                className="h-28 w-full rounded-xl object-cover"
               />
-
-              <p className="text-[11px] text-[var(--text-secondary)]">
-                RN 9 km 214 (+35 min). Se notificará inmediatamente al Dador y a la Planta con la foto verificada.
+              <p className="text-xs text-[var(--text-secondary)]">
+                Se notificará a la red un desvío de +35 minutos en RN 9 km 214 y se coordinará relevo preventivo.
               </p>
-
+            </div>
+            <div className="flex gap-2">
               <ActionButton
                 variant="dark"
                 onClick={handleSendIncident}
-                confirmedLabel="Corte reportado"
-                className="min-h-[40px] text-xs"
+                confirmedLabel="Alerta enviada"
+                className="flex-1 min-h-[40px] text-xs"
               >
-                <span>Enviar reporte a la red</span>
+                <span>Emitir alerta</span>
               </ActionButton>
+              <button
+                type="button"
+                onClick={() => setShowIncidentModal(false)}
+                className="cursor-pointer rounded-full border border-[var(--border-hairline)] px-4 py-2 text-xs font-medium text-[var(--text-secondary)]"
+              >
+                Cancelar
+              </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Modal Publicar Retorno Vacío */}
-        {showBackhaulModal && (
-          <div className="absolute inset-0 z-40 bg-[#141414]/70 p-4 flex items-center justify-center backdrop-blur-xs">
-            <div className="w-full rounded-2xl bg-[var(--bg-surface)] p-4 border border-[var(--border-hairline)] space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold text-[var(--text-primary)]">Publicar retorno vacío</h4>
-                <button type="button" onClick={() => setShowBackhaulModal(false)} className="text-[var(--text-secondary)]">
-                  <X size={15} weight="bold" />
-                </button>
-              </div>
-
-              <form onSubmit={handlePublishBackhaul} className="space-y-2.5">
+      {/* Backhaul Modal */}
+      {showBackhaulModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-sm rounded-2xl border border-[var(--border-hairline)] bg-[var(--bg-surface)] p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-[var(--text-primary)]">Publicar retorno vacío</h3>
+              <button
+                type="button"
+                onClick={() => setShowBackhaulModal(false)}
+                className="cursor-pointer text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+              >
+                <X size={16} weight="bold" />
+              </button>
+            </div>
+            <form onSubmit={handlePublishBackhaul} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-medium text-[var(--text-secondary)] mb-1">
+                  Origen de regreso
+                </label>
                 <select
                   value={originIndex}
                   onChange={(e) => setOriginIndex(Number(e.target.value))}
-                  className="w-full h-9 rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-2 text-xs text-[var(--text-primary)]"
+                  className="h-10 w-full rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-3 text-xs font-medium text-[var(--text-primary)]"
                 >
                   {BACKHAUL_ORIGINS.map((o, idx) => (
                     <option key={o.label} value={idx}>
-                      {o.label} ({formatArs(o.price)}/mód.)
+                      {o.label} ({formatArs(o.price)} / mód.)
                     </option>
                   ))}
                 </select>
+              </div>
 
-                <div className="flex items-center justify-between text-xs px-1">
-                  <span>Módulos libres:</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max="12"
-                    value={freePallets}
-                    onChange={(e) => setFreePallets(Number(e.target.value))}
-                    className="w-14 h-8 rounded-lg border border-[var(--border-hairline)] text-center font-mono"
-                  />
+              <div>
+                <label className="block text-[11px] font-medium text-[var(--text-secondary)] mb-1">
+                  Módulos disponibles en acoplado
+                </label>
+                <div className="flex items-center justify-between rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-3 py-2">
+                  <span className="font-mono text-xs font-bold text-[var(--text-primary)]">
+                    {freePallets} pallets libres
+                  </span>
+                  <div className="flex gap-1">
+                    {[4, 6, 8, 12].map((cnt) => (
+                      <button
+                        key={cnt}
+                        type="button"
+                        onClick={() => setFreePallets(cnt)}
+                        className={`px-2 py-0.5 rounded-lg text-xs font-mono font-semibold cursor-pointer ${
+                          freePallets === cnt
+                            ? 'bg-[#276EF1] text-[#FEFEFE]'
+                            : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)]'
+                        }`}
+                      >
+                        {cnt}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+              </div>
 
+              <div className="flex gap-2 pt-2">
                 <ActionButton
                   type="submit"
-                  variant="primary"
+                  variant="dark"
                   onClick={() => {}}
-                  confirmedLabel="Retorno publicado"
-                  className="min-h-[40px] text-xs"
+                  confirmedLabel="Publicado"
+                  className="flex-1 min-h-[42px] text-xs"
                 >
-                  <span>Publicar unidad</span>
+                  <span>Publicar en red</span>
                 </ActionButton>
-              </form>
-            </div>
+                <button
+                  type="button"
+                  onClick={() => setShowBackhaulModal(false)}
+                  className="cursor-pointer rounded-full border border-[var(--border-hairline)] px-4 py-2 text-xs font-medium text-[var(--text-secondary)]"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
