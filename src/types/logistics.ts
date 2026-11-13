@@ -2,6 +2,7 @@ export type UserRole = 'shipper' | 'carrier' | 'receiver';
 export type ThemeMode = 'light' | 'dark';
 export type CanvasViewMode = '3d' | 'map';
 export type CameraPreset = 'isometric' | 'side' | 'top';
+export type PackagingFormat = 'pallet' | 'boxes' | 'bigbag' | 'drums';
 export type TripStatus =
   | 'docked'
   | 'in_transit'
@@ -17,6 +18,7 @@ export interface PalletSlot {
   status: 'available' | 'occupied' | 'user_booked';
   weightKg: number;
   volumeM3: number;
+  packagingFormat?: PackagingFormat;
   cargoLabel?: string;
   shipperName?: string;
   bookingCode?: string;
@@ -73,6 +75,8 @@ export interface CorridorRoute {
   privateTelemetry: PrivateTelemetry;
   slots: PalletSlot[];
   checkpoints: CorridorCheckpoint[];
+  routeGeometry?: Array<[number, number]>;
+  distanceKm?: number;
 }
 
 export interface CarbonEstimate {

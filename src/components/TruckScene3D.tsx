@@ -10,7 +10,7 @@ import {
   X,
 } from '@phosphor-icons/react';
 import { useSimulation } from '../context/SimulationContext';
-import type { CameraPreset, PalletSlot, ThemeMode } from '../types/logistics';
+import type { CameraPreset, PackagingFormat, PalletSlot, ThemeMode } from '../types/logistics';
 
 const CAMERA_PRESETS: Record<
   CameraPreset,
@@ -259,6 +259,8 @@ function SemiTrailerCutaway({ isDark }: { isDark: boolean }) {
 interface PalletMeshProps {
   slot: PalletSlot;
   isSelectedDraft: boolean;
+  draftFormat: PackagingFormat;
+  draftWeightKg: number;
   isInspected: boolean;
   canSelect: boolean;
   canInspect: boolean;
@@ -269,6 +271,8 @@ interface PalletMeshProps {
 function PalletMesh({
   slot,
   isSelectedDraft,
+  draftFormat,
+  draftWeightKg,
   isInspected,
   canSelect,
   canInspect,
@@ -286,11 +290,17 @@ function PalletMesh({
   const isUserBooked = slot.status === 'user_booked';
   const isInteractive = isAvailable ? canSelect : canInspect;
 
+  const format: PackagingFormat = isSelectedDraft
+    ? draftFormat
+    : slot.packagingFormat ?? (slot.cargoLabel?.toLowerCase().includes('pet') || slot.cargoLabel?.toLowerCase().includes('plástic') ? 'bigbag' : slot.cargoLabel?.toLowerCase().includes('corrugad') || slot.cargoLabel?.toLowerCase().includes('cartón') ? 'boxes' : 'pallet');
+
+  const effectiveWeight = isSelectedDraft ? draftWeightKg : slot.weightKg;
+
   const boxHeight = useMemo(() => {
-    if (isAvailable) return 0.56;
-    const ratio = Math.max(0.45, Math.min(1, slot.weightKg / 820));
+    if (isAvailable && !isSelectedDraft) return 0.56;
+    const ratio = Math.max(0.45, Math.min(1, effectiveWeight / 850));
     return 0.52 + ratio * 0.62;
-  }, [isAvailable, slot.weightKg]);
+  }, [isAvailable, isSelectedDraft, effectiveWeight]);
 
   useFrame((_, delta) => {
     if (!groupRef.current) return;
@@ -320,6 +330,7 @@ function PalletMesh({
   }, [isSelectedDraft, isUserBooked, isInspected, isAvailable, hovered, canSelect, canInspect, isDark]);
 
   const palletWoodColor = isDark ? '#52525B' : '#C4A882';
+  const drumMetalColor = isSelectedDraft || isUserBooked || isInspected ? '#1D4ED8' : isDark ? '#4B5563' : '#6B7280';
 
   return (
     <group
@@ -341,7 +352,7 @@ function PalletMesh({
         document.body.style.cursor = 'default';
       }}
     >
-      {/* Pallet base skid */}
+      {/* Base pallet skid standard Arlog */}
       <mesh position={[0, 0.03, 0]} castShadow receiveShadow>
         <boxGeometry args={[0.88, 0.06, 0.8]} />
         <meshStandardMaterial
@@ -352,7 +363,7 @@ function PalletMesh({
       </mesh>
 
       {isAvailable && !isSelectedDraft ? (
-        /* Translucent available slot footprint */
+        /* Translucent available footprint */
         <mesh position={[0, 0.28, 0]}>
           <boxGeometry args={[0.82, 0.44, 0.74]} />
           <meshStandardMaterial
@@ -363,8 +374,85 @@ function PalletMesh({
             depthWrite={false}
           />
         </mesh>
+      ) : format === 'boxes' ? (
+        /* 2x2x2 stacked boxes */
+        <group position={[0, 0.06, 0]}>
+          {[-0.2, 0.2].map((bx, xi) =>
+            [-0.18, 0.18].map((bz, zi) =>
+              [0, boxHeight * 0.48].map((by, yi) => (
+                <mesh
+                  key={`box-${xi}-${zi}-${yi}`}
+                  position={[bx, by + (boxHeight * 0.46) / 2, bz]}
+                  castShadow
+                  receiveShadow
+                >
+                  <boxGeometry args={[0.37, boxHeight * 0.44, 0.33]} />
+                  <meshStandardMaterial
+                    color={cargoColor}
+                    roughness={0.65}
+                    metalness={0.05}
+                  />
+                </mesh>
+              ))
+            )
+          )}
+          {/* Packaging tape strip on top */}
+          <mesh position={[0, boxHeight * 0.96, 0]}>
+            <boxGeometry args={[0.78, 0.015, 0.14]} />
+            <meshStandardMaterial color={isDark ? '#E4E4E7' : '#27272A'} roughness={0.3} />
+          </mesh>
+        </group>
+      ) : format === 'bigbag' ? (
+        /* Octagonal industrial flexible bulk container (Big Bag FIBC) with lifting loops */
+        <group position={[0, 0.06, 0]}>
+          <mesh position={[0, boxHeight / 2, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[0.39, 0.38, boxHeight, 12]} />
+            <meshStandardMaterial
+              color={cargoColor}
+              roughness={0.6}
+              metalness={0.06}
+            />
+          </mesh>
+          {/* Top filling spout */}
+          <mesh position={[0, boxHeight + 0.05, 0]}>
+            <cylinderGeometry args={[0.14, 0.16, 0.1, 10]} />
+            <meshStandardMaterial color={isDark ? '#E4E4E7' : '#18181B'} roughness={0.4} />
+          </mesh>
+          {/* 4 Corner lifting sling loops */}
+          {[-0.26, 0.26].map((lx, li) =>
+            [-0.26, 0.26].map((lz, lzi) => (
+              <mesh key={`loop-${li}-${lzi}`} position={[lx, boxHeight + 0.04, lz]}>
+                <boxGeometry args={[0.04, 0.09, 0.04]} />
+                <meshStandardMaterial color="#FEFEFE" roughness={0.3} />
+              </mesh>
+            ))
+          )}
+        </group>
+      ) : format === 'drums' ? (
+        /* 4 steel drums arranged 2x2 */
+        <group position={[0, 0.06, 0]}>
+          {[-0.2, 0.2].map((dx, di) =>
+            [-0.18, 0.18].map((dz, dzi) => (
+              <group key={`drum-${di}-${dzi}`} position={[dx, 0, dz]}>
+                <mesh position={[0, boxHeight / 2, 0]} castShadow receiveShadow>
+                  <cylinderGeometry args={[0.18, 0.18, boxHeight, 16]} />
+                  <meshStandardMaterial color={drumMetalColor} roughness={0.35} metalness={0.7} />
+                </mesh>
+                {/* Drum rolling chime rings */}
+                <mesh position={[0, boxHeight * 0.35, 0]}>
+                  <cylinderGeometry args={[0.186, 0.186, 0.02, 16]} />
+                  <meshStandardMaterial color={isDark ? '#D4D4D8' : '#18181B'} roughness={0.3} metalness={0.8} />
+                </mesh>
+                <mesh position={[0, boxHeight * 0.7, 0]}>
+                  <cylinderGeometry args={[0.186, 0.186, 0.02, 16]} />
+                  <meshStandardMaterial color={isDark ? '#D4D4D8' : '#18181B'} roughness={0.3} metalness={0.8} />
+                </mesh>
+              </group>
+            ))
+          )}
+        </group>
       ) : (
-        /* Solid loaded / selected pallet cargo stack */
+        /* Standard stretch-wrapped Arlog Pallet block */
         <group>
           <mesh position={[0, 0.06 + boxHeight / 2, 0]} castShadow receiveShadow>
             <boxGeometry args={[0.82, boxHeight, 0.74]} />
@@ -477,6 +565,8 @@ export function TruckScene3D({ theme }: { theme: ThemeMode }) {
     activeRoute,
     activeRole,
     selectedSlotIds,
+    draftPackagingFormat,
+    draftPalletWeightKg,
     toggleDraftSlot,
     inspectedSlotId,
     setInspectedSlotId,
@@ -584,6 +674,8 @@ export function TruckScene3D({ theme }: { theme: ThemeMode }) {
                       key={slot.id}
                       slot={slot}
                       isSelectedDraft={isSelectedDraft}
+                      draftFormat={draftPackagingFormat}
+                      draftWeightKg={draftPalletWeightKg}
                       isInspected={isInspected}
                       canSelect={isDockedForShipper}
                       canInspect={canInspect}

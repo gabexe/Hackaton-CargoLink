@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { CORRIDOR_ROUTES } from '../data/corridors';
 import { co2ToDieselLiters } from '../utils/carbon';
+import { fetchRealRoadRoute } from '../utils/routing';
 import type {
   BackhaulDraft,
   CanvasViewMode,
@@ -17,6 +18,7 @@ import type {
   CorridorRoute,
   HandoffHint,
   IncidentDraft,
+  PackagingFormat,
   PalletSlot,
   PilotStats,
   RoadIncident,
@@ -24,6 +26,17 @@ import type {
   TripStatus,
   UserRole,
 } from '../types/logistics';
+
+export interface CustomRouteInput {
+  originName: string;
+  originLat: number;
+  originLng: number;
+  destinationName: string;
+  destinationLat: number;
+  destinationLng: number;
+  carrierName?: string;
+  pricePerPalletArs?: number;
+}
 
 export interface SimulationContextValue {
   routes: CorridorRoute[];
@@ -33,6 +46,7 @@ export interface SimulationContextValue {
   canvasView: CanvasViewMode;
   isAutoSimulating: boolean;
   selectedSlotIds: string[];
+  draftPackagingFormat: PackagingFormat;
   draftCargoLabel: string;
   draftPalletWeightKg: number;
   hasCargoProtection: boolean;
@@ -47,10 +61,12 @@ export interface SimulationContextValue {
   setInspectedSlotId: (slotId: string | null) => void;
   toggleDraftSlot: (slotId: string) => void;
   applyPalletQuantityPreset: (count: number) => void;
+  setDraftPackagingFormat: (format: PackagingFormat) => void;
   setDraftCargo: (label: string, weightKg: number) => void;
   setHasCargoProtection: (enabled: boolean) => void;
   confirmShipperBooking: () => string | null;
   publishBackhaulRoute: (draft: BackhaulDraft) => string;
+  createCustomRoute: (input: CustomRouteInput) => Promise<string>;
   startRouteTrip: (routeId: string) => void;
   advanceNextCheckpoint: (routeId: string) => void;
   reportRoadIncident: (routeId: string, draft: IncidentDraft) => void;
@@ -369,7 +385,8 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
   const [canvasView, setCanvasView] = useState<CanvasViewMode>('3d');
   const [isAutoSimulating, setIsAutoSimulating] = useState<boolean>(false);
   const [selectedSlotIds, setSelectedSlotIds] = useState<string[]>([]);
-  const [draftCargoLabel, setDraftCargoLabel] = useState<string>('Envases PET');
+  const [draftPackagingFormat, setDraftPackagingFormat] = useState<PackagingFormat>('pallet');
+  const [draftCargoLabel, setDraftCargoLabel] = useState<string>('Autopartes y metalúrgica');
   const [draftPalletWeightKg, setDraftPalletWeightKg] = useState<number>(650);
   const [hasCargoProtection, setHasCargoProtection] = useState<boolean>(false);
   const [events, setEvents] = useState<SimulationEvent[]>(INITIAL_EVENTS);
@@ -379,6 +396,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
   const bookingCounterRef = useRef<number>(0);
   const backhaulCounterRef = useRef<number>(0);
   const incidentCounterRef = useRef<number>(0);
+  const customRouteCounterRef = useRef<number>(0);
   const eventCounterRef = useRef<number>(10);
   const preIncidentStatusRef = useRef<Record<string, 'in_transit' | 'near_dock'>>({});
 
@@ -518,6 +536,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     const validSet = new Set(validSelectedIds);
     const bookedCount = validSelectedIds.length;
     const bookedCargo = draftCargoLabel;
+    const bookedFormat = draftPackagingFormat;
     const bookedWeight = draftPalletWeightKg;
     const bookedProtection = hasCargoProtection;
     const targetRouteId = activeRoute.id;
@@ -537,6 +556,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
                   status: 'user_booked',
                   weightKg: bookedWeight,
                   volumeM3: 1.6,
+                  packagingFormat: bookedFormat,
                   cargoLabel: bookedCargo,
                   shipperName: 'Plásticos Polo 52 SA',
                   bookingCode,
@@ -553,8 +573,8 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       'shipper',
       targetRouteCode,
       `Plásticos Polo 52 SA reservó ${bookedCount} ${
-        bookedCount === 1 ? 'pallet' : 'pallets'
-      } (${bookedCargo}) - ${bookingCode}.`
+        bookedCount === 1 ? 'módulo' : 'módulos'
+      } (${bookedFormat}: ${bookedCargo}) - ${bookingCode}.`
     );
     setHandoffHint({
       targetRole: 'carrier',
@@ -568,6 +588,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
     activeRoute,
     appendEvent,
     draftCargoLabel,
+    draftPackagingFormat,
     draftPalletWeightKg,
     hasCargoProtection,
     selectedSlotIds,
@@ -627,6 +648,91 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
         message: `Retorno ${code} disponible con ${freePallets} pallets libres. Reservá espacio como Dador PyME.`,
         ctaLabel: 'Reservar como Dador PyME',
       });
+
+      return code;
+    },
+    [appendEvent]
+  );
+
+  const createCustomRoute = useCallback(
+    async (input: CustomRouteInput): Promise<string> => {
+      customRouteCounterRef.current += 1;
+      const code = `RN-USR-${100 + customRouteCounterRef.current}`;
+      const newId = code.toLowerCase();
+
+      const waypoints = [
+        { lat: input.originLat, lng: input.originLng },
+        { lat: input.destinationLat, lng: input.destinationLng },
+      ];
+
+      const roadData = await fetchRealRoadRoute(waypoints);
+      const distKm = roadData.distanceKm > 0 ? roadData.distanceKm : 350;
+      const pricePerPallet = input.pricePerPalletArs ?? Math.max(18000, Math.round(distKm * 115));
+      const dedicatedPrice = Math.round(pricePerPallet * 15);
+      const co2SavedPerPallet = Math.round(distKm * 0.095 * 10) / 10;
+
+      const checkpoints: CorridorCheckpoint[] = [
+        {
+          city: input.originName,
+          kmFromOrigin: 0,
+          lat: input.originLat,
+          lng: input.originLng,
+          status: 'current',
+          etaLabel: 'Salida en dársena',
+        },
+        {
+          city: input.destinationName,
+          kmFromOrigin: distKm,
+          lat: input.destinationLat,
+          lng: input.destinationLng,
+          status: 'upcoming',
+          etaLabel: `+${Math.round(roadData.durationMinutes / 60)}h ${roadData.durationMinutes % 60}m`,
+        },
+      ];
+
+      const newRoute: CorridorRoute = {
+        id: newId,
+        code,
+        origin: input.originName,
+        destination: input.destinationName,
+        receiverPlantName: `Planta Destino (${input.destinationName.split(',')[0]})`,
+        departureLabel: 'Hoy, a coordinar',
+        vehicleLabel: 'Semirremolque Sider 12 módulos',
+        carrierName: input.carrierName?.trim() || 'Logística Federal Conectada',
+        isBackhaul: false,
+        tripStatus: 'docked',
+        pricePerPalletArs: pricePerPallet,
+        dedicatedTruckPriceArs: dedicatedPrice,
+        co2SavedPerPalletKg: co2SavedPerPallet,
+        assignedDock: null,
+        sealPhotoVerified: false,
+        incident: null,
+        privateTelemetry: {
+          lat: String(input.originLat),
+          lng: String(input.originLng),
+          speedKmh: 0,
+          driverName: 'Conductor Asignado',
+          driverLicense: 'LINTI Cargas Generales #882190',
+          unionAgreement: 'CCT 40/89 - Sindicato al día',
+          routeVerified: true,
+        },
+        slots: buildBackhaulSlots(8), // 8 free slots
+        checkpoints,
+        routeGeometry: roadData.geometry,
+        distanceKm: distKm,
+      };
+
+      setRoutes((prev) => [newRoute, ...prev]);
+      setSelectedRouteId(newId);
+      setSelectedSlotIds([]);
+      setInspectedSlotId(null);
+      setCanvasView('map');
+
+      appendEvent(
+        'carrier',
+        code,
+        `Nueva ruta real configurada: ${input.originName.split(',')[0]} -> ${input.destinationName.split(',')[0]} (${distKm} km reales).`
+      );
 
       return code;
     },
@@ -1128,6 +1234,7 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       canvasView,
       isAutoSimulating,
       selectedSlotIds,
+      draftPackagingFormat,
       draftCargoLabel,
       draftPalletWeightKg,
       hasCargoProtection,
@@ -1142,10 +1249,12 @@ export function SimulationProvider({ children }: { children: ReactNode }) {
       setInspectedSlotId,
       toggleDraftSlot,
       applyPalletQuantityPreset,
+      setDraftPackagingFormat,
       setDraftCargo,
       setHasCargoProtection,
       confirmShipperBooking,
       publishBackhaulRoute,
+      createCustomRoute,
       startRouteTrip,
       advanceNextCheckpoint,
       reportRoadIncident,

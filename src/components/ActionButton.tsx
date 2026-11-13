@@ -3,7 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { Check } from '@phosphor-icons/react';
 
 export interface ActionButtonProps {
-  onClick: () => void;
+  onClick?: () => void;
   disabled?: boolean;
   type?: 'button' | 'submit';
   variant?: 'primary' | 'dark' | 'secondary';
@@ -65,7 +65,7 @@ export function ActionButton({
         event.preventDefault();
         const form = event.currentTarget.form;
         const beatTimer = window.setTimeout(() => {
-          onClick();
+          onClick?.();
           form?.requestSubmit();
         }, confirmBeatMs);
         const resetTimer = window.setTimeout(() => {
@@ -76,20 +76,20 @@ export function ActionButton({
       }
       const resetTimer = window.setTimeout(() => setPhase('idle'), 750);
       timersRef.current.push(resetTimer);
-      onClick();
+      onClick?.();
       return;
     }
 
     if (confirmBeatMs > 0 && !shouldReduceMotion) {
       const beatTimer = window.setTimeout(() => {
-        onClick();
+        onClick?.();
       }, confirmBeatMs);
       const resetTimer = window.setTimeout(() => {
         setPhase('idle');
       }, confirmBeatMs + 750);
       timersRef.current.push(beatTimer, resetTimer);
     } else {
-      onClick();
+      onClick?.();
       const resetTimer = window.setTimeout(() => {
         setPhase('idle');
       }, 750);

@@ -12,21 +12,28 @@ import {
 } from '@phosphor-icons/react';
 import { useSimulation } from '../context/SimulationContext';
 import { estimateCarbonSavings } from '../utils/carbon';
+import type { PackagingFormat } from '../types/logistics';
 import { ActionButton } from './ActionButton';
 import { CarbonFootprintCard } from './CarbonFootprintCard';
 
-const CARGO_OPTIONS = [
-  'Envases PET',
-  'Autopartes',
-  'Metalúrgica',
-  'Alimentos secos',
+const COMPATIBLE_CARGO_CATEGORIES = [
+  'Autopartes y metalúrgica',
+  'Plásticos, envases y packaging',
+  'Agroinsumos y semillas (secos)',
+  'Alimentos secos y bebidas',
+  'Construcción, herrajes y electricidad',
+  'Textil, calzado y e-commerce',
+  'Otro rubro seco (personalizado)',
 ] as const;
 
-const PACKAGING_FORMATS = [
-  { id: 'pallet', label: 'Pallet', hint: '1,2×1,0 m · 1 mód.' },
-  { id: 'boxes', label: 'Cajas', hint: '10 cajas = 1 mód.' },
-  { id: 'bigbag', label: 'Big Bag', hint: '1 m³ = 1 mód.' },
-] as const;
+const PACKAGING_FORMATS: Array<{ id: PackagingFormat; label: string; hint: string }> = [
+  { id: 'pallet', label: 'Pallet', hint: '1,2×1,0 m filmado (1 mód.)' },
+  { id: 'boxes', label: 'Cajas', hint: '10 cajas apiladas (1 mód.)' },
+  { id: 'bigbag', label: 'Big Bag', hint: 'Bolsón 1 m³ con eslingas' },
+  { id: 'drums', label: 'Tambores', hint: '4 tambores de 200 L' },
+];
+
+const WEIGHT_PRESETS = [350, 650, 950] as const;
 
 function formatArs(amount: number): string {
   return `$ ${Math.round(amount).toLocaleString('es-AR')}`;
@@ -39,7 +46,10 @@ export function ShipperPanel() {
     activeRoute,
     selectedSlotIds,
     applyPalletQuantityPreset,
+    draftPackagingFormat,
+    setDraftPackagingFormat,
     draftCargoLabel,
+    draftPalletWeightKg,
     setDraftCargo,
     hasCargoProtection,
     setHasCargoProtection,
@@ -49,7 +59,8 @@ export function ShipperPanel() {
   } = useSimulation();
 
   const [lastBookingCode, setLastBookingCode] = useState<string | null>(null);
-  const [packFormat, setPackFormat] = useState<'pallet' | 'boxes' | 'bigbag'>('pallet');
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
+  const [customCargoText, setCustomCargoText] = useState('');
   const [showCarbonDetail, setShowCarbonDetail] = useState(false);
 
   useEffect(() => {
@@ -87,7 +98,7 @@ export function ShipperPanel() {
     userBookedSlots.length > 0 ? userBookedSlots.length : 1
   );
   const activeFormatObj =
-    PACKAGING_FORMATS.find((f) => f.id === packFormat) ?? PACKAGING_FORMATS[0];
+    PACKAGING_FORMATS.find((f) => f.id === draftPackagingFormat) ?? PACKAGING_FORMATS[0];
 
   const openAlternativeRoute = routes.find(
     (r) => r.id !== activeRoute.id && r.tripStatus === 'docked'
@@ -98,6 +109,21 @@ export function ShipperPanel() {
     if (code) {
       setLastBookingCode(code);
     }
+  };
+
+  const handleCategoryChange = (val: string) => {
+    if (val === 'Otro rubro seco (personalizado)') {
+      setIsCustomCategory(true);
+      setDraftCargo(customCargoText || 'Carga seca general', draftPalletWeightKg);
+    } else {
+      setIsCustomCategory(false);
+      setDraftCargo(val, draftPalletWeightKg);
+    }
+  };
+
+  const handleCustomTextChange = (text: string) => {
+    setCustomCargoText(text);
+    setDraftCargo(text.trim() || 'Carga seca general', draftPalletWeightKg);
   };
 
   // Vista 2C: Seguimiento por hitos (en tránsito)
@@ -243,15 +269,15 @@ export function ShipperPanel() {
 
       {/* Packaging Format -> Standardized Fixed Modules */}
       <div className="space-y-1.5">
-        <div className="grid grid-cols-3 gap-1.5">
+        <div className="grid grid-cols-4 gap-1.5">
           {PACKAGING_FORMATS.map((fmt) => {
-            const active = packFormat === fmt.id;
+            const active = draftPackagingFormat === fmt.id;
             return (
               <button
                 key={fmt.id}
                 type="button"
-                onClick={() => setPackFormat(fmt.id)}
-                className={`cursor-pointer rounded-xl border px-2 py-1.5 text-xs font-medium transition-colors ${
+                onClick={() => setDraftPackagingFormat(fmt.id)}
+                className={`cursor-pointer rounded-xl border px-1.5 py-1.5 text-center text-xs font-medium transition-colors ${
                   active
                     ? 'border-[#141414] bg-[#141414] text-[#F6F6F6] dark:border-[#F5F5F7] dark:bg-[#F5F5F7] dark:text-[#111112]'
                     : 'border-[var(--border-hairline)] bg-[var(--bg-canvas)] text-[var(--text-primary)] hover:border-[#A1A1AA]'
@@ -263,7 +289,7 @@ export function ShipperPanel() {
           })}
         </div>
         <p className="text-[11px] text-[var(--text-secondary)]">
-          Equivalencia fija: {activeFormatObj.hint} · Ordenado por descarga
+          3D en vivo: {activeFormatObj.hint}
         </p>
       </div>
 
@@ -320,35 +346,68 @@ export function ShipperPanel() {
         </div>
       </div>
 
-      {/* Compact Row: Cargo Type + Protection */}
-      <div className="flex items-center gap-2">
-        <select
-          aria-label="Tipo de carga"
-          value={draftCargoLabel}
-          onChange={(e) => setDraftCargo(e.target.value, 650)}
-          className="h-9 min-w-0 flex-1 cursor-pointer rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-2.5 text-xs font-medium text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[#276EF1]"
-        >
-          {CARGO_OPTIONS.map((opt) => (
-            <option key={opt} value={opt} className="bg-[var(--bg-surface)]">
-              {opt}
-            </option>
-          ))}
-        </select>
+      {/* Cargo Category (Real Dry Freight Compatibility) + Protection */}
+      <div className="space-y-1.5">
+        <div className="flex items-center gap-2">
+          <select
+            aria-label="Rubro de carga seca"
+            value={isCustomCategory ? 'Otro rubro seco (personalizado)' : draftCargoLabel}
+            onChange={(e) => handleCategoryChange(e.target.value)}
+            className="h-9 min-w-0 flex-1 cursor-pointer rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-2.5 text-xs font-medium text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-[#276EF1]"
+          >
+            {COMPATIBLE_CARGO_CATEGORIES.map((opt) => (
+              <option key={opt} value={opt} className="bg-[var(--bg-surface)]">
+                {opt}
+              </option>
+            ))}
+          </select>
 
-        <button
-          type="button"
-          role="switch"
-          aria-checked={hasCargoProtection}
-          onClick={() => setHasCargoProtection(!hasCargoProtection)}
-          className={`inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition-colors ${
-            hasCargoProtection
-              ? 'border-[#276EF1] bg-[#276EF1]/10 text-[#276EF1]'
-              : 'border-[var(--border-hairline)] bg-[var(--bg-canvas)] text-[var(--text-secondary)]'
-          }`}
-        >
-          <ShieldCheck size={14} weight="regular" aria-hidden="true" />
-          <span>Seguro +2,5%</span>
-        </button>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={hasCargoProtection}
+            onClick={() => setHasCargoProtection(!hasCargoProtection)}
+            className={`inline-flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition-colors ${
+              hasCargoProtection
+                ? 'border-[#276EF1] bg-[#276EF1]/10 text-[#276EF1]'
+                : 'border-[var(--border-hairline)] bg-[var(--bg-canvas)] text-[var(--text-secondary)]'
+            }`}
+          >
+            <ShieldCheck size={14} weight="regular" aria-hidden="true" />
+            <span>Seguro +2,5%</span>
+          </button>
+        </div>
+
+        {isCustomCategory && (
+          <input
+            type="text"
+            placeholder="Especificá tipo de mercadería seca (ej. Bobinas de papel kraft)"
+            value={customCargoText}
+            onChange={(e) => handleCustomTextChange(e.target.value)}
+            className="h-9 w-full rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-3 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] focus:outline-none focus:ring-2 focus:ring-[#276EF1]"
+          />
+        )}
+
+        {/* Real Weight Selector per Module */}
+        <div className="flex items-center justify-between rounded-xl border border-[var(--border-hairline)] bg-[var(--bg-canvas)] px-2.5 py-1.5 text-xs">
+          <span className="text-[11px] text-[var(--text-secondary)]">Peso / mód.:</span>
+          <div className="flex items-center gap-1">
+            {WEIGHT_PRESETS.map((w) => (
+              <button
+                key={w}
+                type="button"
+                onClick={() => setDraftCargo(draftCargoLabel, w)}
+                className={`rounded-lg px-2 py-0.5 font-mono text-[11px] font-semibold transition-colors ${
+                  draftPalletWeightKg === w
+                    ? 'bg-[#276EF1] text-[#FEFEFE]'
+                    : 'bg-[var(--bg-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                {w} kg
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Compact Carbon Impact Pill (expandable) */}
